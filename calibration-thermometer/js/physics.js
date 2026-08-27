@@ -50,7 +50,8 @@
         stir: 0,
         mix: 0,
         boiling: false,
-        heated: false
+        heated: false,
+        _lift: 0
       }));
       this.hotplate = { x: LAYOUT.hotplateX, on: false, targetId: null };
       this.jug = { x: LAYOUT.jug.x, y: LAYOUT.jug.y };

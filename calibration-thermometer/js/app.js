@@ -9,9 +9,10 @@
   const SCENE_W = GEOM.scene.w;
   const BENCH_Y = GEOM.scene.benchY;
   const BK = GEOM.beaker;
-  const PLATE_Y = BENCH_Y - GEOM.plate.h;
   const BEAKER_TOP = BENCH_Y - BK.h;
   const WATER_MAX_H = BK.h - 28;
+  const BUCKET_Y = BENCH_Y - GEOM.bucket.h;
+  const PLATE_LIFT = 12;
 
   const CU = {
     cx: 105,
@@ -61,10 +62,15 @@
   let grab = null;
   let mainLayer;
   const beakerViews = {};
-  let cubeLayer, steamLayer, jugStreamNode, jugGroup, plateGroup, plateCoil;
-  let sceneThermo, sceneColumn;
+  let cubeLayer, steamLayer, jugStreamNode, jugGroup, plateGroup, plateCoil, plateRecess;
+  let sceneThermo, sceneColumn, rodGroup, bucketGroup;
   let columnNode, marksLayer, numbersLayer;
   const cubeNodes = new Map();
+
+  function deco(node) {
+    node.setAttribute('pointer-events', 'none');
+    return node;
+  }
 
   const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -141,7 +147,7 @@
   }
 
   function buildStatic(root) {
-    el('rect', { x: 0, y: 0, width: SCENE_W, height: BENCH_Y, fill: '#f4f9fb' }, root);
+    deco(el('rect', { x: 0, y: 0, width: SCENE_W, height: BENCH_Y, fill: '#f4f9fb' }, root));
     const grid = el('g', {}, root);
     for (let gx = 0; gx <= SCENE_W; gx += 58) {
       el('line', { x1: gx, y1: 0, x2: gx, y2: BENCH_Y, stroke: '#eaf2f6', 'stroke-width': 1 }, grid);
@@ -149,60 +155,74 @@
     for (let gy = 20; gy < BENCH_Y; gy += 58) {
       el('line', { x1: 0, y1: gy, x2: SCENE_W, y2: gy, stroke: '#eaf2f6', 'stroke-width': 1 }, grid);
     }
-    el('rect', { x: 0, y: BENCH_Y, width: SCENE_W, height: 90, fill: '#cbb68d' }, root);
-    el('rect', { x: 0, y: BENCH_Y, width: SCENE_W, height: 8, fill: '#dccba5' }, root);
+    deco(grid);
+    deco(el('rect', { x: 0, y: BENCH_Y, width: SCENE_W, height: 90, fill: '#cbb68d' }, root));
+    deco(el('rect', { x: 0, y: BENCH_Y, width: SCENE_W, height: 8, fill: '#dccba5' }, root));
     mainLayer = el('g', {}, root);
   }
 
   function buildPlate(parent) {
+    const recess = deco(el('rect', {
+      x: sim.hotplate.x - 15, y: BENCH_Y - 16, width: GEOM.plate.w + 30, height: 48, rx: 10,
+      fill: '#5c4c3b'
+    }, parent));
+    plateRecess = recess;
+
     plateGroup = el('g', {
       class: 'draggable',
-      'data-drag': 'plate',
       tabindex: '0',
       role: 'slider',
       'aria-label': 'Hot plate. Slide along the bench with arrow keys; Enter toggles power.'
     }, parent);
+    el('title', {}, plateGroup).textContent = 'Hot plate (drag to move)';
     el('rect', {
-      x: 0, y: PLATE_Y, width: GEOM.plate.w, height: GEOM.plate.h, rx: 6,
+      x: 0, y: BENCH_Y - 9, width: GEOM.plate.w, height: 30, rx: 5,
       fill: 'url(#gMetal)', stroke: '#7d8b95', 'stroke-width': 2
     }, plateGroup);
     el('rect', {
-      x: 12, y: PLATE_Y + 5, width: GEOM.plate.w - 72, height: 9, rx: 4, fill: '#3a3f45'
+      x: 10, y: BENCH_Y - 5, width: GEOM.plate.w - 68, height: 13, rx: 3,
+      fill: '#3a3f45'
     }, plateGroup);
     el('rect', {
-      x: 0, y: PLATE_Y - 10, width: GEOM.plate.w, height: GEOM.plate.h + 20,
-      fill: 'transparent', 'pointer-events': 'all'
+      x: 10, y: BENCH_Y - 5, width: GEOM.plate.w - 68, height: 4, rx: 2,
+      fill: '#555f68'
     }, plateGroup);
-    const swG = el('g', { 'data-switch': '1', cursor: 'pointer' }, plateGroup);
+
+    const swG = el('g', { cursor: 'pointer' }, plateGroup);
     el('title', {}, swG).textContent = 'Hot plate power switch';
     el('circle', {
-      cx: GEOM.plate.w - 36, cy: PLATE_Y + GEOM.plate.h / 2, r: 11, fill: '#33404a'
+      cx: GEOM.plate.w - 34, cy: BENCH_Y + 6, r: 11, fill: '#33404a'
     }, swG);
     plateCoil = el('circle', {
-      cx: GEOM.plate.w - 36, cy: PLATE_Y + GEOM.plate.h / 2, r: 5, fill: '#78848d'
+      cx: GEOM.plate.w - 34, cy: BENCH_Y + 6, r: 5, fill: '#78848d'
     }, swG);
+    swG.addEventListener('pointerdown', function (evt) {
+      evt.stopPropagation();
+      sim.toggleHotplate();
+      if (evt.cancelable) evt.preventDefault();
+    });
+
     setXY(plateGroup, sim.hotplate.x, 0);
   }
 
   function buildBeaker(b, parent) {
     const g = el('g', {
       class: 'draggable',
-      'data-drag': 'beaker:' + b.id,
       tabindex: '0',
       role: 'slider',
       'aria-label': 'Beaker ' + b.id + '. Slide along the bench with arrow keys.'
     }, parent);
     setXY(g, b.x, 0);
 
-    el('ellipse', {
+    deco(el('ellipse', {
       cx: BK.w / 2, cy: BENCH_Y + 4, rx: BK.w / 2 + 8, ry: 7,
       fill: 'rgba(60,50,30,0.16)'
-    }, g);
+    }, g));
 
-    el('path', {
+    deco(el('path', {
       d: 'M7,' + (BEAKER_TOP + 4) + ' q-9,-7 -2,-14',
       stroke: '#b7ccd5', 'stroke-width': 4, fill: 'none', 'stroke-linecap': 'round'
-    }, g);
+    }, g));
 
     el('path', {
       d: roundRect(2, BEAKER_TOP, BK.w - 4, BK.h, 12),
@@ -225,20 +245,15 @@
     }, waterG);
     waterG.bubbles = el('g', {}, waterG);
 
-    el('path', {
+    deco(el('path', {
       d: 'M18,' + (BEAKER_TOP + 34) + ' l-8,60',
       stroke: 'rgba(255,255,255,0.6)', 'stroke-width': 4, fill: 'none', 'stroke-linecap': 'round'
-    }, g);
+    }, g));
 
-    el('text', {
+    deco(el('text', {
       x: BK.w / 2, y: BEAKER_TOP - 10, 'text-anchor': 'middle',
       'font-size': 15, fill: '#7d93a2', 'font-weight': 700
-    }, g).textContent = b.id;
-
-    el('rect', {
-      x: 0, y: BEAKER_TOP - 20, width: BK.w, height: BK.h + 28,
-      fill: 'transparent', 'pointer-events': 'all'
-    }, g);
+    }, g)).textContent = b.id;
 
     g.waterParts = waterG;
     return g;
@@ -249,9 +264,9 @@
       d: '', stroke: 'rgba(110,180,220,0.85)', 'stroke-width': 7, fill: 'none',
       'stroke-linecap': 'round', opacity: 0
     }, parent);
+    deco(jugStreamNode);
     jugGroup = el('g', {
       class: 'draggable',
-      'data-drag': 'jug',
       tabindex: '0',
       role: 'application',
       'aria-label': 'Water jug. Drag it above a beaker opening to pour.'
@@ -285,7 +300,6 @@
   function buildBucket(parent) {
     const bg = el('g', {
       class: 'draggable',
-      'data-drag': 'ice',
       tabindex: '0',
       role: 'button',
       'aria-label': 'Ice bucket. Drag outward or press Enter to take an ice cube.'
@@ -319,34 +333,32 @@
   }
 
   function buildRod(parent) {
-    const rg = el('g', {
+    rodGroup = el('g', {
       class: 'draggable',
-      'data-drag': 'rod',
       tabindex: '0',
       role: 'application',
       'aria-label': 'Stirring rod. Move it in circles inside a beaker to stir.'
     }, parent);
-    el('title', {}, rg).textContent = 'Stirring rod';
+    el('title', {}, rodGroup).textContent = 'Stirring rod';
     const L = GEOM.rod.len;
     const T = GEOM.rod.thick;
-    el('rect', {
+    deco(el('rect', {
       x: -L / 2, y: -T / 2, width: L, height: T, rx: T / 2,
       transform: 'rotate(-28)',
       fill: 'url(#gGlass)', stroke: '#8fb2bf', 'stroke-width': 2
-    }, rg);
+    }, rodGroup));
+    el('circle', { r: 55, fill: 'transparent', 'pointer-events': 'all' }, rodGroup);
     el('rect', {
-      x: -L / 2 - 10, y: -T - 12, width: L + 20, height: T * 2 + 24,
-      transform: 'rotate(-28)',
+      x: -L / 2 - 12, y: -46, width: L + 24, height: 92,
       fill: 'transparent', 'pointer-events': 'all'
-    }, rg);
-    setXY(rg, sim.rod.x, sim.rod.y);
-    return rg;
+    }, rodGroup);
+    setXY(rodGroup, sim.rod.x, sim.rod.y);
+    return rodGroup;
   }
 
   function buildThermoScene(parent) {
     sceneThermo = el('g', {
       class: 'draggable',
-      'data-drag': 'thermo',
       tabindex: '0',
       role: 'application',
       'aria-label': 'Unmarked thermometer. Drag it so the bulb dips into a beaker.'
@@ -475,36 +487,35 @@
     document.body.style.cursor = '';
   }
 
-  function bindPointer() {
-    svg.addEventListener('pointerdown', function (evt) {
-      const sw = evt.target.closest('[data-switch]');
-      if (sw) {
-        sim.toggleHotplate();
-        evt.preventDefault();
-        return;
-      }
-      const target = evt.target.closest('[data-drag]');
-      if (!target) return;
-      const key = target.getAttribute('data-drag');
-      const local = toLocal(svg, evt);
-      ui.pointer = local;
+  function beginDrag(evt, key) {
+    const local = toLocal(svg, evt);
+    ui.pointer = local;
+    grab = { key: key, lastX: local.x, lastY: local.y };
+    try { svg.setPointerCapture(evt.pointerId); } catch (e) { /* ignore */ }
+    document.body.style.cursor = 'grabbing';
+    if (evt.cancelable) evt.preventDefault();
+  }
 
+  function attachDrag(node, key) {
+    node.setAttribute('data-drag', key);
+    node.addEventListener('pointerdown', function (evt) {
       if (key === 'ice') {
+        const local = toLocal(svg, evt);
         const cube = sim.spawnCube(
           Math.max(sim.bucket.x - 70, 30),
           Math.min(local.y, 300)
         );
         cube._vy = 0;
         ui.carriedCubeId = cube.id;
-        grab = { key: 'cube:' + cube.id, lastX: local.x };
+        grab = null;
+        beginDrag(evt, 'cube:' + cube.id);
       } else {
-        grab = { key: key, lastX: local.x };
+        beginDrag(evt, key);
       }
-      try { svg.setPointerCapture(evt.pointerId); } catch (e) { /* ignore */ }
-      document.body.style.cursor = 'grabbing';
-      evt.preventDefault();
     });
+  }
 
+  function bindPointer() {
     svg.addEventListener('pointermove', function (evt) {
       const local = toLocal(svg, evt);
       ui.pointer = local;
@@ -655,8 +666,11 @@
     summaryCard.hidden = true;
     setXY(jugGroup, sim.jug.x, sim.jug.y);
     setXY(plateGroup, sim.hotplate.x, 0);
+    if (plateRecess) plateRecess.setAttribute('x', sim.hotplate.x - 15);
     setXY(sceneThermo, sim.thermo.x, sim.thermo.y);
-    for (const b of sim.beakers) setXY(beakerViews[b.id], b.x, 0);
+    setXY(rodGroup, sim.rod.x, sim.rod.y);
+    setXY(bucketGroup, sim.bucket.x, BUCKET_Y);
+    for (const b of sim.beakers) setXY(beakerViews[b.id], b.x, -b._lift);
     refreshMarks(true);
   }
 
@@ -701,11 +715,13 @@
         }
       }
       if (b.boiling && ui.steam.length < 26 && Math.random() < dtReal * 14) {
-        const sn = el('circle', { fill: 'rgba(200,214,222,0.4)' }, steamLayer);
+        const sn = el('circle', {
+          fill: 'rgba(200,214,222,0.4)', 'pointer-events': 'none'
+        }, steamLayer);
         ui.steam.push({
           bid: b.id,
           x: b.x + 30 + Math.random() * (BK.w - 60),
-          y: waterSurfaceY(b) - 6,
+          y: waterSurfaceY(b) - (b._lift || 0) - 6,
           r: 7 + Math.random() * 8,
           vy: -(34 + Math.random() * 22),
           drift: (Math.random() - 0.5) * 22,
@@ -752,7 +768,10 @@
   function renderScene(dtReal) {
     for (const b of sim.beakers) {
       const view = beakerViews[b.id];
-      setXY(view, b.x, 0);
+      const attachedOn = sim.hotplate.targetId === b.id;
+      const targetLift = attachedOn ? PLATE_LIFT : 0;
+      b._lift += (targetLift - b._lift) * Math.min(1, 8 * dtReal);
+      setXY(view, b.x, -b._lift);
       const surf = waterSurfaceY(b);
       view.waterParts.rect.setAttribute('y', surf);
       view.waterParts.rect.setAttribute('height', Math.max(0, BENCH_Y - 14 - surf));
@@ -772,7 +791,11 @@
       }
     }
 
-    plateGroup.coil.setAttribute('fill', sim.hotplate.on ? '#ff5a2a' : '#78848d');
+    plateCoil.setAttribute('fill', sim.hotplate.on ? '#ff5a2a' : '#78848d');
+    if (plateRecess) plateRecess.setAttribute('x', sim.hotplate.x - 15);
+
+    setXY(rodGroup, sim.rod.x, sim.rod.y);
+    setXY(bucketGroup, sim.bucket.x, BUCKET_Y);
 
     const pouringNow = !!grab && grab.key === 'jug' && ui.pourActive;
     jugGroup.setAttribute(
@@ -784,7 +807,7 @@
       if (mouth) {
         const lipX = sim.jug.x + GEOM.jug.w + 4;
         const lipY = sim.jug.y - 10;
-        const tSurf = waterSurfaceY(mouth);
+        const tSurf = waterSurfaceY(mouth) - (mouth._lift || 0);
         const jit = Math.sin(ui.timeAnim * 22) * 2;
         jugStreamNode.setAttribute(
           'd',
@@ -812,47 +835,70 @@
   }
 
   function syncCubeNodes(dtReal) {
+    const slots = { A: [], B: [] };
+    for (const c of sim.cubes) {
+      if (c.beaker && slots[c.beaker]) slots[c.beaker].push(c);
+    }
+    for (const k in slots) {
+      slots[k].sort(function (a, b) { return a.id - b.id; });
+    }
     const seen = new Set();
     for (const c of sim.cubes) {
       seen.add(c.id);
       let node = cubeNodes.get(c.id);
       if (!node) {
-        node = el('g', { class: 'draggable', 'data-drag': 'cube:' + c.id }, cubeLayer);
+        node = el('g', { class: 'draggable' }, cubeLayer);
         el('title', {}, node).textContent = 'Ice cube';
         el('rect', {
           x: -10, y: -9, width: 20, height: 18, rx: 4.5,
           fill: 'rgba(224,244,252,0.95)', stroke: '#93cbe3', 'stroke-width': 2
         }, node);
-        el('polyline', {
+        deco(el('polyline', {
           points: '-6,-4 -1,-6', stroke: 'rgba(255,255,255,0.9)',
           'stroke-width': 2, fill: 'none'
-        }, node);
+        }, node));
+        const id = c.id;
+        node.addEventListener('pointerdown', function (evt) {
+          beginDrag(evt, 'cube:' + id);
+        });
         cubeNodes.set(c.id, node);
       }
       const beingCarried = grab && grab.key === 'cube:' + c.id;
-      if (!beingCarried && c.beaker === null) {
-        c._vy = (c._vy || 0) + 900 * dtReal;
-        c.y = Math.min(BENCH_Y - 12, c.y + c._vy * dtReal);
-        if (c.y >= BENCH_Y - 12) c._vy = 0;
-      }
-      const host = c.beaker ? sim.beakers.find(function (b) { return b.id === c.beaker; }) : null;
-      let cx = c.x;
-      let cy = c.y;
       let rot = 0;
-      if (host && host.water > 8) {
-        cy = waterSurfaceY(host) - 2 + Math.sin(ui.timeAnim * 2 + c.phase) * 2.5;
-        rot = Math.sin(ui.timeAnim * 1.6 + c.phase) * 7;
+      if (!beingCarried) {
+        const host = c.beaker ? sim.beakers.find(function (b) { return b.id === c.beaker; }) : null;
+        if (host) {
+          const lift = host._lift || 0;
+          const idx = slots[host.id].indexOf(c);
+          const tx = host.x + 44 + (idx % 3) * 48 + ((idx / 3 | 0) % 2) * 20;
+          let ty;
+          if (host.water > 8) {
+            ty = waterSurfaceY(host) - lift - 3 + Math.sin(ui.timeAnim * 2 + c.phase) * 2.5;
+            rot = Math.sin(ui.timeAnim * 1.6 + c.phase) * 7;
+          } else {
+            ty = BENCH_Y - lift - 15 - Math.floor(idx / 3) * 19;
+          }
+          const kEase = Math.min(1, 9 * dtReal);
+          c.x += (tx - c.x) * kEase;
+          c.y += (ty - c.y) * kEase;
+          c._vy = 0;
+        } else {
+          c._vy = (c._vy || 0) + 900 * dtReal;
+          c.y = Math.min(BENCH_Y - 12, c.y + c._vy * dtReal);
+          if (c.y >= BENCH_Y - 12) c._vy = 0;
+        }
       }
       node.setAttribute(
         'transform',
-        'translate(' + cx + ',' + cy + ') rotate(' + rot + ') scale(' +
-        Math.max(0.25, c.size / 20) + ')'
+        'translate(' + c.x.toFixed(1) + ',' + c.y.toFixed(1) + ') rotate(' +
+        rot.toFixed(1) + ') scale(' + Math.max(0.25, c.size / 20).toFixed(3) + ')'
       );
     }
     for (const pair of Array.from(cubeNodes.entries())) {
       if (!seen.has(pair[0])) {
         pair[1].remove();
         cubeNodes.delete(pair[0]);
+        if (grab && grab.key === 'cube:' + pair[0]) grab = null;
       }
     }
   }
@@ -897,9 +943,17 @@
     cubeLayer = el('g', {}, mainLayer);
     steamLayer = el('g', {}, mainLayer);
     buildJug(mainLayer);
-    buildBucket(mainLayer);
-    buildRod(mainLayer);
+    bucketGroup = buildBucket(mainLayer);
+    rodGroup = buildRod(mainLayer);
     buildThermoScene(mainLayer);
+
+    attachDrag(plateGroup, 'plate');
+    attachDrag(beakerViews.A, 'beaker:A');
+    attachDrag(beakerViews.B, 'beaker:B');
+    attachDrag(jugGroup, 'jug');
+    attachDrag(rodGroup, 'rod');
+    attachDrag(sceneThermo, 'thermo');
+    attachDrag(bucketGroup, 'ice');
 
     buildCloseup();
 
