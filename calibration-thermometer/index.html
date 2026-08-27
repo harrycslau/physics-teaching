@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calibration Lab — Calibrate an Unmarked Thermometer</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="js/physics.js"></script>
+  <script src="js/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="titles">
+      <h1>Calibration Lab</h1>
+      <p class="task">Use the available apparatus to calibrate the unmarked thermometer.</p>
+    </div>
+    <div class="controls">
+      <button id="btn-hint" type="button" aria-expanded="false">Hint</button>
+      <button id="btn-reset" type="button">Reset experiment</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section id="bench-wrap" aria-label="Laboratory bench">
+      <svg id="bench" viewBox="0 0 1160 700" role="application" aria-label="Virtual laboratory bench with draggable apparatus"></svg>
+      <div id="summary-card" hidden role="dialog" aria-label="Calibration summary">
+        <button id="summary-close" type="button" aria-label="Close summary">&times;</button>
+        <h2>Thermometer calibrated</h2>
+        <p id="summary-text"></p>
+        <p id="summary-detail"></p>
+      </div>
+    </section>
+
+    <aside id="side">
+      <div class="panel" id="thermo-panel">
+        <svg id="closeup" viewBox="0 0 210 560" role="application" aria-label="Close-up of the thermometer stem. Click here to add or erase calibration marks."></svg>
+        <p class="steady-line"><span id="steady-dot" aria-hidden="true"></span><span id="steady-label">not steady</span></p>
+      </div>
+      <div class="panel tools" role="toolbar" aria-label="Marking tools">
+        <button class="tool selected" data-tool="pen" type="button" aria-pressed="true">✎ Mark</button>
+        <button class="tool" data-tool="eraser" type="button" aria-pressed="false">⌫ Erase</button>
+        <button id="btn-divide" class="tool divide" type="button" disabled title="Requires two marks on the thermometer">Divide ×10</button>
+      </div>
+    </aside>
+  </main>
+
+  <div id="hint-box" hidden></div>
+</body>
+</html>
