@@ -22,6 +22,7 @@ python3 -m http.server 8000
 - Mark the stem at any moment with the **Mark** tool, remove marks with **Erase**, and use
   **Divide ×10** once two marks exist.
 - Nothing is evaluated or gated. A quiet "reading steady" indicator appears when the column has settled.
+- The **Speed** button in the header cycles 1× / 2× / 4× simulation rate for quicker heating and cooling.
 
 ## Physics modelled (`js/physics.js`)
 

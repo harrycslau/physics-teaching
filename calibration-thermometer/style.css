@@ -90,6 +90,13 @@ button:disabled {
 }
 #btn-reset:hover { background: #0c6580; }
 
+#btn-speed.active {
+  background: #d9f2e3;
+  border-color: #17a35b;
+  color: #157347;
+  font-weight: 600;
+}
+
 .layout {
   flex: 1;
   display: flex;

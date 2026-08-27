@@ -39,6 +39,7 @@
   const hintBtn = document.getElementById('btn-hint');
   const resetBtn = document.getElementById('btn-reset');
   const divideBtn = document.getElementById('btn-divide');
+  const speedBtn = document.getElementById('btn-speed');
   const steadyDot = document.getElementById('steady-dot');
   const steadyLabel = document.getElementById('steady-label');
 
@@ -52,6 +53,7 @@
     swirlAngle: 0,
     done: false,
     hintStep: 0,
+    speed: 1,
     bubbles: [],
     steam: [],
     bubbleAccum: 0,
@@ -631,6 +633,12 @@
       refreshMarks(true);
     });
     resetBtn.addEventListener('click', doReset);
+    speedBtn.addEventListener('click', function () {
+      ui.speed = ui.speed === 1 ? 2 : ui.speed === 2 ? 4 : 1;
+      speedBtn.textContent = 'Speed ' + ui.speed + '×';
+      speedBtn.setAttribute('aria-pressed', String(ui.speed > 1));
+      speedBtn.classList.toggle('active', ui.speed > 1);
+    });
     summaryClose.addEventListener('click', function () {
       summaryCard.hidden = true;
     });
@@ -974,7 +982,7 @@
       ui.timeAnim += dt;
       applyStirring(dt);
       applyPouring(dt);
-      acc += dt;
+      acc += dt * ui.speed;
       while (acc >= STEP) {
         sim.step(STEP);
         acc -= STEP;
