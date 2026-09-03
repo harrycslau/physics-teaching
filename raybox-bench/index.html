@@ -53,16 +53,17 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
     <button class="tbtn radio" id="btn-slit-single" title="Single-slit – one ray">│ Single</button>
     <button class="tbtn radio" id="btn-slit-triple" title="Triple-slit – three rays">┃┃┃ Triple</button>
     <div class="sep"></div>
-    <button class="tbtn" id="btn-convex100" title="Convex lens f=100mm">Lens C 100</button>
-    <button class="tbtn" id="btn-convex200" title="Convex lens f=200mm">Lens C 200</button>
-    <button class="tbtn" id="btn-convex400" title="Convex lens f=400mm">Lens C 400</button>
+    <button class="tbtn" id="btn-convex100" aria-label="CV lens, thick" title="Convex lens, strongest curvature">CV lens (thick)</button>
+    <button class="tbtn" id="btn-convex200" aria-label="CV lens, mid" title="Convex lens, medium curvature">CV lens (mid)</button>
+    <button class="tbtn" id="btn-convex400" aria-label="CV lens, thin" title="Convex lens, gentlest curvature">CV lens (thin)</button>
     <div class="sep"></div>
-    <button class="tbtn" id="btn-concave100" title="Concave lens f=−100mm">Lens V 100</button>
-    <button class="tbtn" id="btn-concave200" title="Concave lens f=−200mm">Lens V 200</button>
-    <button class="tbtn" id="btn-concave400" title="Concave lens f=−400mm">Lens V 400</button>
+    <button class="tbtn" id="btn-concave100" aria-label="CC lens, thick" title="Concave lens, strongest curvature">CC lens (thick)</button>
+    <button class="tbtn" id="btn-concave200" aria-label="CC lens, mid" title="Concave lens, medium curvature">CC lens (mid)</button>
+    <button class="tbtn" id="btn-concave400" aria-label="CC lens, thin" title="Concave lens, gentlest curvature">CC lens (thin)</button>
     <div class="sep"></div>
     <button class="tbtn" id="btn-flat" title="Flat glass block 120×60mm">Block</button>
-    <button class="tbtn" id="btn-prism" title="Triangular prism 60°">Prism</button>
+    <button class="tbtn" id="btn-prism60" aria-label="Prism 60, equilateral" title="Equilateral prism (60°–60°–60°)">Prism-60</button>
+    <button class="tbtn" id="btn-prism90" aria-label="Prism 90, right-angle" title="Right-isosceles prism (45°–45°–90°)">Prism-90</button>
     <button class="tbtn" id="btn-semi" title="Semicircular glass block">Semi</button>
     <div class="sep"></div>
     <button class="tbtn" id="btn-delete" title="Delete selected component">🗑 Del</button>
@@ -95,13 +96,15 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
     <h3>Placing Components</h3>
     <ul>
       <li>Click a component button in the toolbar to place it at the bench center.</li>
+      <li>Lenses: <b>CV</b> = convex, <b>CC</b> = concave; <i>thick / mid / thin</i> describe the visible curvature (strongest to gentlest). The exact focal length is shown in the properties panel.</li>
+      <li>Prisms: <b>Prism-60</b> (equilateral, 60°–60°–60°) and <b>Prism-90</b> (right-isosceles, 45°–45°–90°, right angle at the top).</li>
       <li>Drag the component body to move it.</li>
       <li>Drag the rotation handle (circle above the component) to rotate it.</li>
       <li>Click to select; press <b>Delete</b> key or the <b>🗑 Del</b> button to remove.</li>
     </ul>
     <h3>Properties Panel</h3>
     <ul>
-      <li>Shows position, rotation, focal length (lenses), or refractive index.</li>
+      <li>Shows the variant name, position, rotation, focal length (lenses), or refractive index.</li>
       <li>Lens focal length is editable — type a value and press Enter.</li>
     </ul>
     <h3>Keyboard Shortcuts</h3>
@@ -125,7 +128,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
 // ─────────────────────────────────────────────────────────────
 
 const {
-  Vec2, EPSILON, deg2rad, rad2deg, clamp,
+  Vec2, EPSILON, rad2deg, clamp,
   ptInConvex, ptInPolygon,
   LineSurface, ArcSurface,
   reflect, refractRay,
@@ -235,10 +238,18 @@ class RayBox extends Component {
   }
 }
 
+/** Descriptive variant name for the standard toolbar presets (100/200/400 mm). */
+function lensLabel(efl) {
+  const kind = efl > 0 ? 'CV' : 'CC';
+  const strength = { 100: 'thick', 200: 'mid', 400: 'thin' }[Math.abs(efl)];
+  return strength ? `${kind} lens (${strength})` : (efl > 0 ? 'Convex Lens' : 'Concave Lens');
+}
+
 class ConvexLens extends Component {
-  constructor(pos, rot, efl = 200) {
+  constructor(pos, rot, efl = 200, label = null) {
     super('convex', pos, rot);
     this.efl = efl;
+    this.label = label || lensLabel(efl);
     this.thickness = 8;
     this.aperture = 50;
     this.recalcSurfaces();
@@ -305,9 +316,10 @@ class ConvexLens extends Component {
 }
 
 class ConcaveLens extends Component {
-  constructor(pos, rot, efl = -200) {
+  constructor(pos, rot, efl = -200, label = null) {
     super('concave', pos, rot);
     this.efl = efl;
+    this.label = label || lensLabel(efl);
     this.thickness = 8;
     this.aperture = 50;
     this.recalcSurfaces();
@@ -405,20 +417,38 @@ class FlatBlock extends Component {
 }
 
 class Prism extends Component {
-  constructor(pos, rot, apexAngle = 60) {
+  /**
+   * cfg.variant '60': equilateral triangle, side 90 mm (height = s·√3/2).
+   * cfg.variant '90': right-isosceles, hypotenuse 100 mm as the lab-prism
+   * base with the 90° corner at the top (legs = L/√2, apex height L/2).
+   * Both are centroid-centered so move/rotate/selection bounds stay natural.
+   */
+  constructor(pos, rot, cfg = {}) {
     super('prism', pos, rot);
-    this.apexAngle = apexAngle;
-    this.height = 80;
-    this.base = 100;
-    const rad = deg2rad(apexAngle / 2);
-    const hh = this.height / 2;
-    const halfBase = hh * Math.tan(rad);
-    const verts = [
-      new Vec2(-halfBase, -hh),
-      new Vec2(halfBase, -hh),
-      new Vec2(0, hh)
+    this.variant = cfg.variant === '90' ? '90' : '60';
+    this.label = this.variant === '90' ? 'Prism-90' : 'Prism-60';
+    let verts;
+    if (this.variant === '90') {
+      const L = 100;              // hypotenuse along the bottom
+      verts = [
+        new Vec2(-L / 2, -L / 6), // centroid of a triangle sits 1/3 of the
+        new Vec2(L / 2, -L / 6),  // median above the base; apex median L/3
+        new Vec2(0, L / 3)
+      ];
+    } else {
+      const s = 90, h = s * Math.sqrt(3) / 2;
+      verts = [
+        new Vec2(-s / 2, -h / 3),
+        new Vec2(s / 2, -h / 3),
+        new Vec2(0, 2 * h / 3)
+      ];
+    }
+    this.verts = verts;          // CCW winding → (dy,−dx) normals point outward
+    this.sides = [
+      verts[0].dist(verts[1]),
+      verts[1].dist(verts[2]),
+      verts[2].dist(verts[0])
     ];
-    this.verts = verts;
     this.surfaces = [];
     for (let i = 0; i < 3; i++) {
       this.surfaces.push(new LineSurface(verts[i], verts[(i + 1) % 3], 1.5));
@@ -610,7 +640,9 @@ function generateEmission(raybox, whiteLight = false) {
     }
   } else {
     const count = clamp(Math.round(40 + raybox.apertureWidth * 0.8), 40, 100);
-    const sigma = aperHalf * 0.25;
+    // Wider profile than a tight laser (σ ≈ 0.4·halfAperture) so the beam
+    // edges stay visible instead of falling off within the first few samples.
+    const sigma = aperHalf * 0.4;
     for (let i = 0; i < count; i++) {
       const t = count > 1 ? (i / (count - 1)) * 2 - 1 : 0;
       const offset = t * aperHalf;
@@ -675,6 +707,7 @@ function beginComponentTransform(ctx, view, comp) {
 
 let beamBuffer = null;
 let glowBuffer = null;
+let haloBuffer = null;
 
 function ensureBuffers(w, h) {
   if (!beamBuffer || beamBuffer.width !== w || beamBuffer.height !== h) {
@@ -682,6 +715,8 @@ function ensureBuffers(w, h) {
     beamBuffer.width = w; beamBuffer.height = h;
     glowBuffer = document.createElement('canvas');
     glowBuffer.width = w; glowBuffer.height = h;
+    haloBuffer = document.createElement('canvas');
+    haloBuffer.width = w; haloBuffer.height = h;
   }
 }
 
@@ -766,11 +801,18 @@ function drawRays(ctx, view, samples, whiteLight) {
       ctx.restore();
     }
   } else {
+    // Continuous (unslit) beam. Tuned independently from the discrete
+    // single/triple-slit rays above. Brightness is normalised against the
+    // sample count so adaptive sampling changes do not alter the total;
+    // a defined core plus two blurred halos keeps the band luminous with
+    // soft edges, while caustic pile-ups still saturate toward white-hot.
+    const norm = clamp(64 / samples.length, 0.4, 2.5);
+    const coreAlpha = 0.11 * norm;
     bctx.globalCompositeOperation = 'lighter';
     for (const s of samples) {
       const col = whiteLight ? wavelengthToRGB(s.wavelength) : { r: 255, g: 215, b: 0 };
-      bctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},${(s.weight * 0.03).toFixed(4)})`;
-      bctx.lineWidth = 1.5;
+      bctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},${(s.weight * coreAlpha).toFixed(4)})`;
+      bctx.lineWidth = 1.6;
       bctx.beginPath();
       for (let i = 0; i < s.path.length; i++) {
         const sp = view.worldToScreen(s.path[i]);
@@ -778,15 +820,21 @@ function drawRays(ctx, view, samples, whiteLight) {
       }
       bctx.stroke();
     }
+    const hctx = haloBuffer.getContext('2d');
+    hctx.clearRect(0, 0, view.screenW, view.screenH);
+    hctx.filter = 'blur(2.5px)';
+    hctx.drawImage(beamBuffer, 0, 0, view.screenW, view.screenH);
+    hctx.filter = 'none';
     const gctx = glowBuffer.getContext('2d');
     gctx.clearRect(0, 0, view.screenW, view.screenH);
-    gctx.filter = 'blur(3px)';
+    gctx.filter = 'blur(11px)';
     gctx.drawImage(beamBuffer, 0, 0, view.screenW, view.screenH);
     gctx.filter = 'none';
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.drawImage(glowBuffer, 0, 0, view.screenW, view.screenH);
-    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.75; ctx.drawImage(glowBuffer, 0, 0, view.screenW, view.screenH);
+    ctx.globalAlpha = 0.90; ctx.drawImage(haloBuffer, 0, 0, view.screenW, view.screenH);
+    ctx.globalAlpha = 0.90; ctx.drawImage(beamBuffer, 0, 0, view.screenW, view.screenH);
     ctx.restore();
   }
 }
@@ -965,7 +1013,8 @@ function createComponent(type, efl) {
     case 'convex': comp = new ConvexLens(pos, 0, efl); break;
     case 'concave': comp = new ConcaveLens(pos, 0, efl); break;
     case 'flatblock': comp = new FlatBlock(pos, 0); break;
-    case 'prism': comp = new Prism(pos, 0); break;
+    case 'prism60': comp = new Prism(pos, 0, { variant: '60' }); break;
+    case 'prism90': comp = new Prism(pos, 0, { variant: '90' }); break;
     case 'semicircle': comp = new SemicircularBlock(pos, 0); break;
   }
   if (comp) pushCommand(new AddCommand(comp));
@@ -1017,7 +1066,7 @@ function updatePropsPanel() {
     html += `<label>Rotation <span>${rad2deg(c.rot).toFixed(1)}°</span></label>`;
   } else {
     const names = { convex: 'Convex Lens', concave: 'Concave Lens', flatblock: 'Flat Block', prism: 'Prism', semicircle: 'Semicircle' };
-    title.textContent = names[c.type] || c.type;
+    title.textContent = c.label || names[c.type] || c.type;
     if (c.type === 'convex' || c.type === 'concave') {
       html += `<label>EFL (mm) <input type="number" value="${c.efl}" onchange="setEFL(${c.id}, this.value)" /></label>`;
       html += `<label>Radius <span>${c.radius ? c.radius.toFixed(1) : '—'} mm</span></label>`;
@@ -1083,10 +1132,10 @@ window.duplicateSelected = function() {
   let dup;
   const p = spawnPosition();
   switch (c.type) {
-    case 'convex': dup = new ConvexLens(p, c.rot, c.efl); break;
-    case 'concave': dup = new ConcaveLens(p, c.rot, c.efl); break;
+    case 'convex': dup = new ConvexLens(p, c.rot, c.efl, c.label); break;
+    case 'concave': dup = new ConcaveLens(p, c.rot, c.efl, c.label); break;
     case 'flatblock': dup = new FlatBlock(p, c.rot, c.w, c.h); break;
-    case 'prism': dup = new Prism(p, c.rot, c.apexAngle); break;
+    case 'prism': dup = new Prism(p, c.rot, { variant: c.variant }); break;
     case 'semicircle': dup = new SemicircularBlock(p, c.rot, c.radius); break;
   }
   if (dup) pushCommand(new AddCommand(dup));
@@ -1179,7 +1228,8 @@ function initToolbar() {
   bind('btn-concave200', () => createComponent('concave', -200));
   bind('btn-concave400', () => createComponent('concave', -400));
   bind('btn-flat', () => createComponent('flatblock'));
-  bind('btn-prism', () => createComponent('prism'));
+  bind('btn-prism60', () => createComponent('prism60'));
+  bind('btn-prism90', () => createComponent('prism90'));
   bind('btn-semi', () => createComponent('semicircle'));
   bind('btn-delete', () => deleteSelected());
   bind('btn-clear', () => {

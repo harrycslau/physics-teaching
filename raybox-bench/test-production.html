@@ -39,9 +39,9 @@ function runOpticsCoreTests(ctx) {
 
   // Medium-aware tracer over shared surfaces (test scaffolding only; it
   // calls the production ArcSurface/LineSurface/refractRay from core).
-  // Returns final pos/direction plus the count of valid refraction events.
+  // Returns final pos/direction plus counts of refractions and reflections.
   function traceThrough(pos, d, surfaces) {
-    var medium = 'air', hits = 0;
+    var medium = 'air', hits = 0, refl = 0;
     for (var step = 0; step < 20; step++) {
       var best = null, bestT = Infinity;
       for (var k = 0; k < surfaces.length; k++) {
@@ -57,13 +57,13 @@ function runOpticsCoreTests(ctx) {
       }
       var nrm = entering ? best.normal : best.normal.mul(-1);
       var refr = C.refractRay(d, nrm, entering ? 1.0 : 1.5, entering ? 1.5 : 1.0);
-      if (refr === null) { d = C.reflect(d, nrm); pos = best.point.add(d.mul(1e-6)); continue; }
+      if (refr === null) { d = C.reflect(d, nrm); refl++; pos = best.point.add(d.mul(1e-6)); continue; }
       d = refr;
       hits++;
       medium = entering ? 'glass' : 'air';
       pos = best.point.add(d.mul(1e-6));
     }
-    return { pos: pos, d: d, hits: hits };
+    return { pos: pos, d: d, hits: hits, refl: refl };
   }
 
   // ─── 1. Solver: closed form, converges, tiny residual ─────
@@ -207,11 +207,14 @@ function runOpticsCoreTests(ctx) {
   var pos = new C.Vec2(75, -30);
   var semiPts = [];
   for (i = 0; i <= 24; i++) { var a = Math.PI + Math.PI * i / 24; semiPts.push(new C.Vec2(Math.cos(a) * 80, Math.sin(a) * 80)); }
+  var s60 = 90, h60 = s60 * Math.sqrt(3) / 2;
+  var L90 = 100;
   var shapes = {
     convex:  geomFor('convex', 200).outline,
     concave: geomFor('concave', -200).outline,
     block: [new C.Vec2(-60, -30), new C.Vec2(60, -30), new C.Vec2(60, 30), new C.Vec2(-60, 30)],
-    prism: [new C.Vec2(-40, -40), new C.Vec2(40, -40), new C.Vec2(0, 40)],
+    prism60: [new C.Vec2(-s60 / 2, -h60 / 3), new C.Vec2(s60 / 2, -h60 / 3), new C.Vec2(0, 2 * h60 / 3)],
+    prism90: [new C.Vec2(-L90 / 2, -L90 / 6), new C.Vec2(L90 / 2, -L90 / 6), new C.Vec2(0, L90 / 3)],
     semicircle: semiPts
   };
   var shapeNames = Object.keys(shapes);
@@ -275,21 +278,67 @@ function runOpticsCoreTests(ctx) {
   check(Math.abs(bRes.d.y) < 1e-9, 'tilted block: output parallel to input (dy=' + bRes.d.y.toExponential(2) + ')');
   check(Math.abs(bRes.pos.y - 15) > 0.5, 'tilted block: lateral displacement = ' + (bRes.pos.y - 15).toFixed(2) + ' mm');
 
-  // Prism (faces wound v0→v1→v2 CCW): bottom(0), right(1), left(2).
-  var pHalf = 40, halfBase = pHalf * Math.tan(30 * Math.PI / 180);
-  var prismVerts = [new C.Vec2(-halfBase, -pHalf), new C.Vec2(halfBase, -pHalf), new C.Vec2(0, pHalf)];
-  var prismSurf = [];
-  for (i = 0; i < 3; i++) {
-    prismSurf.push(new C.LineSurface(prismVerts[i], prismVerts[(i + 1) % 3], 1.5, 1));
+  // Helper: build CCW-wound LineSurface faces for a centroid-centered triangle.
+  function prismSurfaces(verts) {
+    var out = [];
+    for (var q = 0; q < 3; q++) {
+      out.push(new C.LineSurface(verts[q], verts[(q + 1) % 3], 1.5, 1));
+    }
+    return out;
   }
-  var pFull = traceThrough(new C.Vec2(-200, -10), new C.Vec2(1, 0), prismSurf);
-  check(pFull.hits === 2, 'prism: two refractions (entry + exit), hits=' + pFull.hits);
-  check(pFull.d.angle() !== 0, 'prism: net deviation (exit angle=' + (pFull.d.angle() * 180 / Math.PI).toFixed(2) + '\u00b0)');
-  // Each face, hit from outside, refracts on its own:
-  var pEntry = traceThrough(new C.Vec2(-200, -10), new C.Vec2(1, 0), [prismSurf[2]]);
-  check(pEntry.hits === 1 && pEntry.d.angle() !== 0, 'prism: left face bends an entering ray');
-  var pExit = traceThrough(new C.Vec2(200, -10), new C.Vec2(-1, 0), [prismSurf[1]]);
-  check(pExit.hits === 1 && pExit.d.angle() !== 0, 'prism: right face bends a ray entering from its side');
+  function triAngles(verts) {
+    var ang = [];
+    for (var q = 0; q < 3; q++) {
+      var a = verts[(q + 1) % 3].sub(verts[q]), b = verts[(q + 2) % 3].sub(verts[q]);
+      ang.push(Math.acos(C.clamp(a.dot(b) / (a.len() * b.len()), -1, 1)) * 180 / Math.PI);
+    }
+    return ang;
+  }
+
+  // ── Prism-60: equilateral, centroid-centered, bends at entry AND exit ──
+  var eqs = 90, eqh = eqs * Math.sqrt(3) / 2;
+  var p60Verts = [new C.Vec2(-eqs / 2, -eqh / 3), new C.Vec2(eqs / 2, -eqh / 3), new C.Vec2(0, 2 * eqh / 3)];
+  var eqA = triAngles(p60Verts);
+  check(approx(eqA[0], 60, 1e-6) && approx(eqA[1], 60, 1e-6) && approx(eqA[2], 60, 1e-6),
+        'Prism-60 angles are 60°/60°/60° (' + eqA.map(function (x) { return x.toFixed(3); }).join('/') + ')');
+  var eqSides = [p60Verts[0].dist(p60Verts[1]), p60Verts[1].dist(p60Verts[2]), p60Verts[2].dist(p60Verts[0])];
+  check(approx(eqSides[0], eqSides[1], 1e-9) && approx(eqSides[1], eqSides[2], 1e-9) && approx(eqSides[0], eqs, 1e-9),
+        'Prism-60 all sides = ' + eqs + ' mm');
+  var eqC = p60Verts[0].add(p60Verts[1]).add(p60Verts[2]).mul(1 / 3);
+  check(approx(eqC.x, 0, 1e-9) && approx(eqC.y, 0, 1e-9), 'Prism-60 centroid at origin');
+  var p60Surf = prismSurfaces(p60Verts);
+  var p60 = traceThrough(new C.Vec2(-200, 0), new C.Vec2(1, 0), p60Surf);
+  check(p60.hits === 2, 'Prism-60: two refractions (entry + exit), hits=' + p60.hits);
+  check(p60.d.angle() !== 0, 'Prism-60: net deviation = ' + (p60.d.angle() * 180 / Math.PI).toFixed(2) + '\u00b0');
+
+  // ── Prism-90: right-isosceles, 45°/45°/90°, hypotenuse base, TIR-capable ──
+  var Lr = 100;
+  var p90Verts = [new C.Vec2(-Lr / 2, -Lr / 6), new C.Vec2(Lr / 2, -Lr / 6), new C.Vec2(0, Lr / 3)];
+  var rA = triAngles(p90Verts);
+  var sortedRA = rA.slice().sort();
+  check(approx(sortedRA[0], 45, 1e-6) && approx(sortedRA[1], 45, 1e-6) && approx(sortedRA[2], 90, 1e-6),
+        'Prism-90 angles are 45°/45°/90° (' + rA.map(function (x) { return x.toFixed(3); }).join('/') + ')');
+  var rSides = [p90Verts[0].dist(p90Verts[1]), p90Verts[1].dist(p90Verts[2]), p90Verts[2].dist(p90Verts[0])];
+  check(approx(rSides[1], rSides[2], 1e-9), 'Prism-90 legs are equal (' + rSides[1].toFixed(3) + ' mm)');
+  check(approx(rSides[0], rSides[1] * Math.SQRT2, 1e-6), 'Prism-90 hypotenuse = leg·√2');
+  var rC = p90Verts[0].add(p90Verts[1]).add(p90Verts[2]).mul(1 / 3);
+  check(approx(rC.x, 0, 1e-9) && approx(rC.y, 0, 1e-9), 'Prism-90 centroid at origin');
+  var p90Surf = prismSurfaces(p90Verts);
+  // Horizontal ray through Prism-90 also refracts at both faces:
+  var p90 = traceThrough(new C.Vec2(-200, 0), new C.Vec2(1, 0), p90Surf);
+  check(p90.hits === 2, 'Prism-90: two refractions through the body, hits=' + p90.hits);
+  check(p90.d.angle() !== 0, 'Prism-90: net deviation = ' + (p90.d.angle() * 180 / Math.PI).toFixed(2) + '\u00b0');
+  // Normal-incidence entry through the hypotenuse base → the ray meets a leg
+  // at 45° incidence; glass→air critical angle is 41.81°, so total internal
+  // reflection occurs at both legs and the ray returns out the base (the
+  // classic right-angle prism retroreflector).
+  var p90tir = traceThrough(new C.Vec2(10, -300), new C.Vec2(0, 1), p90Surf);
+  check(p90tir.refl >= 2, 'Prism-90: two TIR events at leg faces (refl=' + p90tir.refl + ')');
+  check(p90tir.d.y < -0.999, 'Prism-90 retroreflects beam back out (exit dir = ' +
+        p90tir.d.x.toFixed(3) + ',' + p90tir.d.y.toFixed(3) + ')');
+  // Critical-angle sanity: 45° > asin(1/1.5) ≈ 41.81°
+  check(Math.asin(1 / 1.5) * 180 / Math.PI < 45 - 3, 'TIR at 45° is valid (critical = ' +
+        (Math.asin(1 / 1.5) * 180 / Math.PI).toFixed(2) + '\u00b0)');
 
   // Semicircular block: a radial ray meets the curved face at normal
   // incidence (no bending there) and refracts at the flat face.
