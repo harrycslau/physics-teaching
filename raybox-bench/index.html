@@ -198,11 +198,17 @@ class RayBox extends Component {
     ctx.font = `10px system-ui`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    // beginComponentTransform mirrors Y (scale(zoom,−zoom)) so geometry stays
+    // Y-up in world space; canvas text would render upside down without this
+    // compensating flip. Both labels sit at y = 0, so positions are unchanged.
+    ctx.save();
+    ctx.scale(1, -1);
     ctx.fillText(this.power ? 'ON' : 'OFF', 0, 0);
     ctx.fillStyle = '#ffd700';
     ctx.font = `8px system-ui`;
     const slitLabel = this.slitAttachment === 'single' ? '│' : this.slitAttachment === 'triple' ? '┃┃┃' : '';
     ctx.fillText(slitLabel, hw - 8, 0);
+    ctx.restore();
     ctx.restore();
     this.renderSlit(ctx, view);
   }
@@ -713,7 +719,8 @@ let glowBuffer = null;
 let haloBuffer = null;
 
 function ensureBuffers(w, h) {
-  if (!beamBuffer || beamBuffer.width !== w || beamBuffer.height !== h) {
+  if (!beamBuffer || !glowBuffer || !haloBuffer ||
+      beamBuffer.width !== w || beamBuffer.height !== h) {
     beamBuffer = document.createElement('canvas');
     beamBuffer.width = w; beamBuffer.height = h;
     glowBuffer = document.createElement('canvas');
@@ -784,8 +791,17 @@ function drawRays(ctx, view, samples, whiteLight) {
   const h = Math.round(view.screenH * dpr);
   ensureBuffers(w, h);
   const bctx = beamBuffer.getContext('2d');
-  bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  bctx.clearRect(0, 0, view.screenW, view.screenH);
+  const hctx = haloBuffer.getContext('2d');
+  const gctx = glowBuffer.getContext('2d');
+  // All three off-screen buffers live in the same device-pixel space as the
+  // main canvas: reset each to the DPR transform and clear in CSS-pixel
+  // coordinates before any drawing, so core/halo/glow stay perfectly
+  // registered on Retina (otherwise halo/glow land at half scale in the
+  // top-left corner as a detached ghost beam).
+  for (const bufferCtx of [bctx, hctx, gctx]) {
+    bufferCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    bufferCtx.clearRect(0, 0, view.screenW, view.screenH);
+  }
   const isDiscrete = samples.length <= 35;
   if (isDiscrete) {
     for (const s of samples) {
@@ -830,13 +846,11 @@ function drawRays(ctx, view, samples, whiteLight) {
       }
       bctx.stroke();
     }
-    const hctx = haloBuffer.getContext('2d');
-    hctx.clearRect(0, 0, view.screenW, view.screenH);
+    // Buffers already share the DPR transform and were cleared above; all
+    // drawing below stays in CSS-pixel coordinates.
     hctx.filter = 'blur(2.5px)';
     hctx.drawImage(beamBuffer, 0, 0, view.screenW, view.screenH);
     hctx.filter = 'none';
-    const gctx = glowBuffer.getContext('2d');
-    gctx.clearRect(0, 0, view.screenW, view.screenH);
     gctx.filter = 'blur(11px)';
     gctx.drawImage(beamBuffer, 0, 0, view.screenW, view.screenH);
     gctx.filter = 'none';

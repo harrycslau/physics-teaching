@@ -197,6 +197,8 @@ var src = '"use strict";' + m[1] + "\n;globalThis.__api = {" +
   " drawRays: drawRays, generateEmission: generateEmission, traceRay: traceRay," +
   " selectComp: selectComp, lensLabel: lensLabel," +
   " get beamBuffer(){ return beamBuffer; }," +
+  " get haloBuffer(){ return haloBuffer; }," +
+  " get glowBuffer(){ return glowBuffer; }," +
   " pushTransform: function (c, op, orr, np, nr) { pushCommand(new TransformCommand(c, op, orr, np, nr)); }," +
   " setEFL: window.setEFL, undo: undo, redo: redo };";
 eval(src);
@@ -437,6 +439,80 @@ check(/,0\.15\)$/.test(last) && /,0\.15\)$/.test(first) && first !== last,
       "9d. first and last (violet/red) layers use identical alpha — no dominant final draw");
 // No slit restored afterwards; wide continuous white path untouched (9c).
 globalThis.setSlit("none");
+
+// 9e. High-DPI buffer pipeline: dpr 1, 1.5, 2, 3 — registration, clearing,
+// aperture alignment, and upright text. (Stub canvases record every call,
+// so we can assert transforms/coords even without pixels.)
+function firstCall(calls, name) {
+  for (var z = 0; z < calls.length; z++) if (calls[z].name === name && !calls[z].set) return z;
+  return -1;
+}
+[1, 1.5, 2, 3].forEach(function (dpr) {
+  globalThis.devicePixelRatio = dpr;
+  view.resize();
+  var samples = api.generateEmission(api.app.raybox, false);
+  for (var z = 0; z < samples.length; z++) api.traceRay(samples[z], api.app.components);
+  // Beam must start at the ray-box aperture plane (x = −150 + 30 + 2 = −118),
+  // fanned across the 30 mm aperture (±15 mm); DPR must not move it.
+  check(samples.every(function (s) { return Math.abs(s.path[0].x + 118) < 1e-9; }) &&
+        Math.abs(Math.max.apply(null, samples.map(function (s) { return Math.abs(s.path[0].y); })) - 15) < 1e-9,
+        "9e. dpr=" + dpr + ": beam starts at the ray-box aperture plane, fanned across 30 mm");
+  var fctx = makeCtx();
+  api.drawRays(fctx, view, samples, false);
+  var W = Math.round(view.screenW * dpr), H = Math.round(view.screenH * dpr);
+  var bufs = [["beam", api.beamBuffer], ["halo", api.haloBuffer], ["glow", api.glowBuffer]];
+  check(bufs.every(function (p) { return p[1].width === W && p[1].height === H; }),
+        "9e. dpr=" + dpr + ": all buffers at device size " + W + "\u00d7" + H);
+  bufs.forEach(function (p) {
+    var calls = p[1].getContext("2d").__calls;
+    var iST = firstCall(calls, "setTransform"), iCR = firstCall(calls, "clearRect");
+    check(iST === 0 && String(calls[0].args.slice(0, 6)) === String([dpr, 0, 0, dpr, 0, 0]),
+          "9e. dpr=" + dpr + ": " + p[0] + " buffer gets setTransform(dpr,…) first");
+    check(iCR > iST && String(calls[iCR].args) === String([0, 0, view.screenW, view.screenH]),
+          "9e. dpr=" + p[0] + " cleared in CSS px under the DPR transform (dpr=" + dpr + ")");
+  });
+  var hDI = api.haloBuffer.getContext("2d").__calls.filter(function (c) { return !c.set && c.name === "drawImage"; });
+  var gDI = api.glowBuffer.getContext("2d").__calls.filter(function (c) { return !c.set && c.name === "drawImage"; });
+  check(hDI.length === 1 && String(hDI[0].args.slice(1)) === String([0, 0, view.screenW, view.screenH]) &&
+        gDI.length === 1 && String(gDI[0].args.slice(1)) === String([0, 0, view.screenW, view.screenH]),
+        "9e. dpr=" + dpr + ": halo/glow blit the core 1:1 into the same CSS-px rect (no offset ghost)");
+  var comps = fctx.calls.filter(function (c) { return !c.set && c.name === "drawImage"; });
+  check(comps.length === 3 && comps.every(function (c) {
+    return String(c.args.slice(1)) === String([0, 0, view.screenW, view.screenH]);
+  }), "9e. dpr=" + dpr + ": core+halo+glow composite onto identical device rect");
+});
+
+// 9f. vertical resize at fixed DPR: same width, different height must not
+// leave stale-height buffers behind (browser-zoom / window-resize artifact).
+globalThis.devicePixelRatio = 2;
+elements["canvas"].getBoundingClientRect = function () { return { left: 0, top: 0, width: 1200, height: 600 }; };
+view.resize();
+var rzSamples = api.generateEmission(api.app.raybox, false);
+api.drawRays(makeCtx(), view, rzSamples, false);
+check(api.beamBuffer.width === 2400 && api.beamBuffer.height === 1200 &&
+      api.haloBuffer.height === 1200 && api.glowBuffer.height === 1200,
+      "9f. resize (same width, new height) recreated every buffer at 2400×1200");
+elements["canvas"].getBoundingClientRect = function () { return { left: 0, top: 0, width: 1200, height: 800 }; };
+view.resize();
+
+// 9g. ray-box canvas text stays upright despite the Y-flipping CTM
+var tctx = makeCtx();
+api.app.raybox.render(tctx, view);
+var tc = tctx.__calls;
+var compFlip = -1, unitFlips = [], texts = [];
+tc.forEach(function (c, idx) {
+  if (c.set) return;
+  if (c.name === "scale") {
+    if (c.args[1] < 0 && c.args[0] !== 1) compFlip = idx;              // scale(zoom, −zoom)
+    else if (c.args[0] === 1 && c.args[1] === -1) unitFlips.push(idx); // compensating scale(1, −1)
+  }
+  if (c.name === "fillText") texts.push(idx);
+});
+check(compFlip !== -1 && texts.length >= 1, "9g. ray-box renders text under the flipped transform");
+check(unitFlips.length >= 1 && unitFlips.every(function (u) {
+  return u > compFlip && texts.some(function (t) { return t > u; });
+}) && texts.every(function (t) { return unitFlips.some(function (u) { return u < t; }); }),
+"9g. every fillText (ON/OFF + slit label) is preceded by a compensating scale(1,−1) → upright");
 
 // 10. one full render frame with rays tracing through the live scene
 try {
