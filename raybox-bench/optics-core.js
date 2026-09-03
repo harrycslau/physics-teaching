@@ -157,6 +157,30 @@
     clone() { return new LineSurface(this.a.clone(), this.b.clone(), this.n, this.outwardSign); }
   }
 
+  /**
+   * Perfect plane mirror: a reflective line segment. Intersects like a
+   * LineSurface (so it participates in nearest-hit ordering) but never
+   * refracts — callers flip the ray with reflect(dir, n) where n is the
+   * stored outward normal oriented against the incident direction.
+   * Two-sided by default: reflect() handles either orientation.
+   */
+  class MirrorSurface extends LineSurface {
+    constructor(a, b) {
+      super(a, b, 1.0, 1);
+      this.material = 'mirror';
+      this.mirror = true;
+    }
+    /** Orient the surface normal against the incident ray (either side works). */
+    normalAgainst(incident) {
+      return incident.dot(this.normal) < 0 ? this.normal : this.normal.mul(-1);
+    }
+    /** Law of reflection: r = d − 2(d·n)n. */
+    reflectDir(incident) {
+      return reflect(incident, this.normalAgainst(incident));
+    }
+    clone() { return new MirrorSurface(this.a.clone(), this.b.clone()); }
+  }
+
   class ArcSurface extends OpticalSurface {
     constructor(center, radius, startAngle, endAngle, outwardSign = 1, n = 1.5) {
       super('glass', n);
@@ -452,7 +476,7 @@
   return {
     Vec2, TAU, EPSILON, deg2rad, rad2deg, clamp, transformPoint, aabbOfPoints,
     normalizeAngle, angleInSweep, raySegHit, rayCircleHit, ptInConvex, ptInPolygon,
-    OpticalSurface, LineSurface, ArcSurface,
+    OpticalSurface, LineSurface, ArcSurface, MirrorSurface,
     reflect, refractRay,
     CAUCHY_A, CAUCHY_B, WAVELENGTHS, cauchyN, wavelengthToRGB,
     LENS_N, SOLVER_REL_TOL, lensPower,

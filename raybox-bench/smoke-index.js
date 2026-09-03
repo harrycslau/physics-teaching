@@ -128,10 +128,49 @@ check(html.indexOf("Prism-60</b> (equilateral") !== -1 || /Prism-60[\s\S]{0,80}e
       "0. help overlay describes both prism variants");
 check(/variants \(A, B, C\)/i.test(html), "0. help overlay matches neutral A/B/C lens naming");
 
+check(/\.tbtn svg path,\.tbtn svg rect,\.tbtn svg circle\{/.test(html),
+      "0b. icon stroke CSS covers path, rect AND circle");
+check(buttonInnerText("btn-mirror") === "Mirror" && buttonInnerText("btn-protractor") === "Protractor",
+      "0d. Mirror and Protractor buttons carry their text labels");
+check(/aria-label="Plane mirror"/.test(html) && /aria-label="Full-circle protractor"/.test(html),
+      "0d. mirror/protractor accessible labels present");
+var iRedo = html.indexOf('id="btn-redo"'), iZI = html.indexOf('id="btn-zoomin"'),
+    iZO = html.indexOf('id="btn-zoomout"'), iHelp = html.indexOf('id="btn-help"');
+check(iRedo !== -1 && iRedo < iZI && iZI < iZO && iZO < iHelp &&
+      (html.slice(iZO + 10, html.lastIndexOf("<button", iHelp)).match(/<button/g) || []).length === 0,
+      "0e. Zoom In / Zoom Out sit exactly between Redo and Help, no extra buttons");
+check(buttonInnerText("btn-zoomin") === "Zoom In" && buttonInnerText("btn-zoomout") === "Zoom Out",
+      "0e. zoom buttons keep text labels (+ magnifier icon, checked in 0e-dyn)");
+check(/aria-label="Zoom in"/.test(html) && /aria-label="Zoom out"/.test(html) &&
+      /title="Zoom in \(\+\)"/.test(html) && /title="Zoom out \(\u2212\)"/.test(html),
+      "0e. zoom buttons have accessible names and tooltips");
+check(/<b>\+ \/ \u2212<\/b> \u2013 Zoom/.test(html) && /360\u00b0 measurement overlay/.test(html) &&
+      /reflects light from either side/.test(html),
+      "0e. help documents zoom keys, protractor overlay, two-sided mirror");
+
+// 0f. new components in the factory & duplication switch
+check(/case 'mirror': comp = new PlaneMirror\(pos, 0\)/.test(html) &&
+      /case 'protractor': comp = new Protractor\(pos, 0\)/.test(html),
+      "0f. factory handles mirror & protractor");
+check(/case 'mirror': dup = new PlaneMirror\(p, c\.rot, c\.length\)/.test(html) &&
+      /case 'protractor': dup = new Protractor\(p, c\.rot, c\.radius\)/.test(html),
+      "0f. duplication preserves mirror length / protractor radius");
+check(/comp\.type === 'raybox' \|\| comp\.type === 'protractor'\) continue/.test(html),
+      "0f. tracer explicitly excludes the protractor from optical intersection");
+
+// 0g. every component button icon is aria-hidden AND pointer-transparent
+["btn-convex100", "btn-convex200", "btn-convex400", "btn-concave100", "btn-concave200",
+ "btn-concave400", "btn-flat", "btn-prism60", "btn-prism90", "btn-semi",
+ "btn-mirror", "btn-protractor", "btn-zoomin", "btn-zoomout"].forEach(function (id) {
+  check(/aria-hidden="true" focusable="false"/.test(buttonInner(id)),
+      "0g. #" + id + " icon is hidden from AT and never intercepts clicks");
+});
+
 // 0b. every placeable component button carries a leading, aria-hidden SVG icon
 var ICON_BUTTONS = ["btn-convex100", "btn-convex200", "btn-convex400",
                     "btn-concave100", "btn-concave200", "btn-concave400",
-                    "btn-flat", "btn-prism60", "btn-prism90", "btn-semi"];
+                    "btn-flat", "btn-prism60", "btn-prism90", "btn-semi",
+                    "btn-mirror", "btn-protractor"];
 ICON_BUTTONS.forEach(function (id) {
   var inner = buttonInner(id);
   check(inner !== null && /^<svg\b[^>]*aria-hidden="true"[^>]*>/.test(inner.trim()),
@@ -195,6 +234,7 @@ var src = '"use strict";' + m[1] + "\n;globalThis.__api = {" +
   " app: app, get view(){ return view; }," +
   " createComponent: createComponent, drawSelectionOutline: drawSelectionOutline," +
   " drawRays: drawRays, generateEmission: generateEmission, traceRay: traceRay," +
+  " hitTest: hitTest, onKeyDown: onKeyDown," +
   " selectComp: selectComp, lensLabel: lensLabel," +
   " get beamBuffer(){ return beamBuffer; }," +
   " get haloBuffer(){ return haloBuffer; }," +
@@ -208,10 +248,10 @@ var view = api.view;
 check(!!view && view.screenW === 1200, "1. index.html initialised (View built from DOM stub)");
 check(api.app.raybox !== null, "1. ray box created at startup");
 
-// 2. create every component type (six placeable definitions incl. two prisms)
-[["convex", 200], ["concave", -200], ["flatblock"], ["prism60"], ["prism90"], ["semicircle"]]
+// 2. create every component type (eight placeable definitions incl. two prisms)
+[["convex", 200], ["concave", -200], ["flatblock"], ["prism60"], ["prism90"], ["semicircle"], ["mirror"], ["protractor"]]
   .forEach(function (t) { api.createComponent(t[0], t[1]); });
-check(api.app.components.length === 7, "2. all six definitions created (+raybox)");
+check(api.app.components.length === 9, "2. all eight definitions created (+raybox)");
 var convex = api.app.components.find(function (c) { return c.type === "convex"; });
 var concave = api.app.components.find(function (c) { return c.type === "concave"; });
 var prism60 = api.app.components.find(function (c) { return c.type === "prism" && c.variant === "60"; });
@@ -293,10 +333,22 @@ function outlineRound(comp, label) {
     comp.rot = 0;
   });
 }
+var mirrorComp = api.app.components.find(function (c) { return c.type === "mirror"; });
+var protoComp = api.app.components.find(function (c) { return c.type === "protractor"; });
+check(!!mirrorComp && !!protoComp, "4a. mirror and protractor placed");
+check(mirrorComp.length === 100 && mirrorComp.label === "Mirror" &&
+      mirrorComp.surfaces.length === 1 && mirrorComp.surfaces[0].mirror === true,
+      "4a. plane mirror: 100 mm face, one MirrorSurface");
+check(protoComp.surfaces.length === 0 && protoComp.radius === 110 && protoComp.label === "Protractor",
+      "4a. protractor: no optical surfaces (overlay only)");
+check(mirrorComp.getRotHandlePos().sub(mirrorComp.pos).len() > 50 &&
+      protoComp.getRotHandlePos().sub(protoComp.pos).len() > protoComp.radius,
+      "4a. rotation handles sit outside both components");
 [convex, concave,
  api.app.components.find(function (c) { return c.type === "flatblock"; }),
  prism60, prism90,
- api.app.components.find(function (c) { return c.type === "semicircle"; })
+ api.app.components.find(function (c) { return c.type === "semicircle"; }),
+ mirrorComp, protoComp
 ].forEach(function (comp) { outlineRound(comp, comp.label || comp.type); });
 
 // 5. props panel title shows the variant label
@@ -521,6 +573,148 @@ try {
 } catch (e) {
   check(false, "10. render frame threw: " + e);
 }
+
+// 11. Plane mirror through the PRODUCTION tracer (single-slit beam)
+globalThis.setSlit("single");
+mirrorComp.pos = new C.Vec2(150, 0);
+mirrorComp.rot = 135 * Math.PI / 180;                    // normal at 225°
+var mray = api.generateEmission(api.app.raybox, false)[0];
+api.traceRay(mray, [api.app.raybox, mirrorComp]);
+check(mray.terminated && mray.path.length >= 2,
+      "11. single ray reached and reflected off the mirror (depth " + mray.depth + ")");
+var expectedDir = C.Vec2.fromAngle(2 * (225 * Math.PI / 180) + Math.PI); // (0,−1)
+check(Math.abs(mray.direction.x - expectedDir.x) < 1e-9 &&
+      Math.abs(mray.direction.y - expectedDir.y) < 1e-9,
+      "11. production reflection obeys the law exactly (dir " + mray.direction.x.toFixed(6) +
+      "," + mray.direction.y.toFixed(6) + ")");
+var bounce = mray.path.some(function (p) { return Math.abs(p.x - 150) < 1e-6 && Math.abs(p.y) < 1e-6; });
+check(bounce, "11. reflection vertex recorded at the mirror's displayed position");
+check(mray.wavelength === 550 && Math.abs(mray.weight - 1) < 1e-12 &&
+      mray.currentMedium.type === "air",
+      "11. wavelength, intensity and medium preserved through reflection");
+// 11b. the reflected ray then interacts with another optical element:
+// a convex lens placed on the reflected path refracts it (on-axis, 2 faces).
+var lensPos = convex.pos.clone(), lensRot = convex.rot;
+convex.pos = new C.Vec2(150, -160); convex.rot = Math.PI / 2;   // axis vertical
+var mray2 = api.generateEmission(api.app.raybox, false)[0];
+api.traceRay(mray2, [api.app.raybox, mirrorComp, convex]);
+check(mray2.path.length >= 4,
+      "11b. reflected ray enters and leaves the lens afterwards (" + mray2.path.length + " path points)");
+check(mray2.path.some(function (p) { return Math.abs(p.x - 150) < 1e-6 && Math.abs(p.y + 156) < 1e-3; }) &&
+      mray2.currentMedium.type === "air",
+      "11b. lens entry vertex at (150, −156); medium bookkeeping consistent");
+convex.pos = lensPos; convex.rot = lensRot;
+// 11c. move/rotate then re-reflect at the new pose:
+mirrorComp.pos = new C.Vec2(200, 0); mirrorComp.rot = 45 * Math.PI / 180;
+var mray3 = api.generateEmission(api.app.raybox, false)[0];
+api.traceRay(mray3, [api.app.raybox, mirrorComp]);
+check(mray3.path.some(function (p) { return Math.abs(p.x - 200) < 1e-6 && Math.abs(p.y) < 1e-6; }) &&
+      mray3.direction.y > 0.999,
+      "11c. moved+rotated mirror reflects at its displayed position (dir " +
+      mray3.direction.x.toFixed(3) + "," + mray3.direction.y.toFixed(3) + ")");
+mirrorComp.pos = new C.Vec2(-40, 60); mirrorComp.rot = 0;   // park off-beam for later tests
+
+// 12. Protractor: ray-invisible, click-transparent interior, 1° markings
+globalThis.setSlit("none");
+protoComp.pos = new C.Vec2(20, 0); protoComp.rot = 0;
+var compsAll = api.app.components;
+var compsNoP = compsAll.filter(function (c) { return c !== protoComp; });
+var withP = api.generateEmission(api.app.raybox, false);
+withP.forEach(function (s2) { api.traceRay(s2, compsAll); });
+var withoutP = api.generateEmission(api.app.raybox, false);
+withoutP.forEach(function (s2) { api.traceRay(s2, compsNoP); });
+var identical = withP.length === withoutP.length && withP.every(function (s2, i2) {
+  var o = withoutP[i2];
+  return s2.path.length === o.path.length &&
+         s2.path.every(function (p, j) { return Math.abs(p.x - o.path[j].x) < 1e-12 && Math.abs(p.y - o.path[j].y) < 1e-12; });
+});
+check(identical, "12. every traced ray is bit-identical with the protractor in the scene");
+check(withP.every(function (s2) { return s2.currentMedium.componentId !== protoComp.id; }),
+      "12. no ray ever enters the protractor");
+check(api.hitTest(protoComp.pos, view).comp === protoComp, "12. center hub selectable");
+check(api.hitTest(protoComp.localToWorld(new C.Vec2(protoComp.radius, 0)), view).comp === protoComp,
+      "12. rim band selectable");
+check(api.hitTest(protoComp.localToWorld(new C.Vec2(40, 3)), view).comp === protoComp,
+      "12. baseline strip selectable");
+check(api.hitTest(protoComp.localToWorld(new C.Vec2(45, 30)), view).comp !== protoComp,
+      "12. transparent interior passes clicks through to components underneath");
+var pctx = makeCtx();
+protoComp.selected = true;
+protoComp.rot = 37.4 * Math.PI / 180;
+protoComp.render(pctx, view);
+var pMove = pctx.__calls.filter(function (c) { return !c.set && c.name === "moveTo"; });
+check(pMove.length >= 360, "12. full 360° of 1° ticks drawn (" + pMove.length + " segments)");
+var pTexts = pctx.__calls.filter(function (c) { return !c.set && c.name === "fillText"; });
+check(pTexts.length === 37, "12. 36 labels every 10° + selected-rotation readout (got " + pTexts.length + ")");
+check(pTexts[pTexts.length - 1].args[0] === "37°", "12. center readout rounds 37.4° → 37°");
+protoComp.rot = 37.6 * Math.PI / 180;
+api.selectComp(protoComp);
+check(elements["props-title"].textContent === "Protractor" &&
+      elements["props-body"].innerHTML.indexOf(">38°<") !== -1,
+      "12. props title 'Protractor'; rotation readout 37.6° → 38° (1° resolution)");
+protoComp.selected = false;
+// 12b. duplicate/delete/undo preserve protractor & mirror identity
+api.selectComp(protoComp);
+globalThis.duplicateSelected();
+var dupP = api.app.components.find(function (c) { return c.type === "protractor" && c.id !== protoComp.id; });
+check(!!dupP && dupP.label === "Protractor" && dupP.radius === protoComp.radius,
+      "12b. duplicating the protractor preserves it");
+api.selectComp(mirrorComp);
+globalThis.duplicateSelected();
+var dupM = api.app.components.find(function (c) { return c.type === "mirror" && c.id !== mirrorComp.id; });
+check(!!dupM && dupM.label === "Mirror" && dupM.length === 100 && dupM.surfaces[0].mirror === true,
+      "12b. duplicating the mirror preserves length and reflective surface");
+api.selectComp(dupP);
+globalThis.deleteSelected();
+check(!api.app.components.includes(dupP), "12b. protractor duplicate deleted");
+api.undo();
+check(api.app.components.includes(dupP), "12b. undo restores it");
+
+// 13. Zoom controls (view methods, keyboard, center anchor, DPR alignment)
+var z0 = view.zoom;
+check(Math.abs(z0 - view.fitZoom) < 1e-12, "13. initial zoom equals fit zoom (" + z0 + ")");
+view.zoomIn();
+check(Math.abs(view.zoom - z0 * 1.2) < 1e-12, "13. Zoom In applies exactly ×1.2");
+view.zoomOut();
+check(Math.abs(view.zoom - z0) < 1e-12, "13. Zoom Out applies exactly ÷1.2");
+view.zoomIn(); view.zoomIn();
+var scr = view.worldToScreen(view.cameraPos);
+check(Math.abs(scr.x - view.screenW / 2) < 1e-9 && Math.abs(scr.y - view.screenH / 2) < 1e-9,
+      "13. zoom is anchored to the visible workspace center");
+for (var zz = 0; zz < 40; zz++) view.zoomIn();
+check(view.zoom === 8, "13. zoom clamps at maximum 8");
+for (zz = 0; zz < 90; zz++) view.zoomOut();
+check(view.zoom === 0.3, "13. zoom clamps at minimum 0.3");
+view.resetZoom();
+check(Math.abs(view.zoom - view.fitZoom) < 1e-12, "13. resetZoom restores the fit");
+function kev(key, tag) { return { key: key, preventDefault: function () {}, target: { tagName: tag || "CANVAS" } }; }
+var k0 = view.zoom;
+api.onKeyDown(kev("+"));
+check(Math.abs(view.zoom - k0 * 1.2) < 1e-12, "13. '+' keyboard zooms in");
+api.onKeyDown(kev("_"));
+check(Math.abs(view.zoom - k0) < 1e-12, "13. '−' keyboard zooms out");
+api.onKeyDown(kev("0"));
+check(view.zoom === view.fitZoom, "13. '0' keyboard resets zoom");
+view.zoomIn();
+api.onKeyDown(kev("+", "INPUT"));
+check(Math.abs(view.zoom - view.fitZoom * 1.2) < 1e-12, "13. zoom keys ignored while typing in the properties field");
+view.resetZoom();
+// High-DPI alignment survives a zoom change (buffers sized by screen px × dpr):
+globalThis.devicePixelRatio = 3; view.resize();
+view.zoomIn(); view.zoomIn(); view.zoomOut();
+var zSamples = api.generateEmission(api.app.raybox, false);
+zSamples.forEach(function (s2) { api.traceRay(s2, compsAll); });
+var zctx = makeCtx();
+api.drawRays(zctx, view, zSamples, false);
+var zDraw = zctx.calls.filter(function (c) { return !c.set && c.name === "drawImage"; });
+check(zDraw.length === 3 && zDraw.every(function (c) {
+  return String(c.args.slice(1)) === String([0, 0, view.screenW, view.screenH]);
+}), "13. at dpr=3 after zooming, core/halo/glow still share one device rect (no ghost)");
+check(api.beamBuffer.width === 3600 && api.beamBuffer.height === 2400 &&
+      api.haloBuffer.width === 3600 && api.glowBuffer.height === 2400,
+      "13. buffers recreated at dpr=3 device size after resize+zoom");
+globalThis.devicePixelRatio = 2; view.resize();
+protoComp.rot = 0;
 
 buffer.push("", "Smoke results: " + passed + " passed, " + failed + " failed");
 $.NSFileHandle.fileHandleWithStandardOutput.writeData(

@@ -19,7 +19,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .tbtn.radio{padding:3px 7px}
 .tbtn.radio.active{background:#505020;border-color:var(--accent);color:var(--accent)}
 .tbtn svg{width:19px;height:19px;fill:currentColor;flex-shrink:0}
-.tbtn svg path,.tbtn svg rect{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
+.tbtn svg path,.tbtn svg rect,.tbtn svg circle{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
 #workspace{flex:1;position:relative;overflow:hidden}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
 #props{position:absolute;top:8px;right:8px;width:220px;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:10px;display:none;z-index:5}
@@ -68,6 +68,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
     <button class="tbtn" id="btn-prism60" aria-label="Prism 60, equilateral" title="Equilateral prism (60°–60°–60°)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2L14.75 13.7H1.25Z"/></svg>Prism-60</button>
     <button class="tbtn" id="btn-prism90" aria-label="Prism 90, right-angle" title="Right-isosceles prism (45°–45°–90°)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 4.85L14.75 11.6H1.25Z"/></svg>Prism-90</button>
     <button class="tbtn" id="btn-semi" aria-label="Semicircular glass block" title="Semicircular glass block"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M1.5 5H14.5A6.5 6.5 0 0 1 1.5 5Z"/></svg>Semi</button>
+    <button class="tbtn" id="btn-mirror" aria-label="Plane mirror" title="Plane mirror (reflects from either side)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10 1.5V14.5"/><path d="M7.5 1.5V14.5"/><path d="M3.5 14L6.5 11M3.5 10.5L6.5 7.5M3.5 7L6.5 4M3.5 3.5L5 2"/></svg>Mirror</button>
+    <button class="tbtn" id="btn-protractor" aria-label="Full-circle protractor" title="360° protractor (measurement overlay)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.3"/><path d="M1.7 8H14.3M8 1.7V4M12.5 3.5L11.1 4.9M4.8 14H11.2"/></svg>Protractor</button>
     <div class="sep"></div>
     <button class="tbtn" id="btn-delete" title="Delete selected component">🗑 Del</button>
     <button class="tbtn" id="btn-clear" title="Clear all placed components">Clear</button>
@@ -75,6 +77,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
     <div class="sep"></div>
     <button class="tbtn" id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
     <button class="tbtn" id="btn-redo" title="Redo (Ctrl+Y)">↪ Redo</button>
+    <button class="tbtn" id="btn-zoomin" aria-label="Zoom in" title="Zoom in (+)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="6.8" cy="6.8" r="4.6"/><path d="M10.2 10.2L14 14M4.7 6.8H8.9M6.8 4.7V8.9"/></svg>Zoom In</button>
+    <button class="tbtn" id="btn-zoomout" aria-label="Zoom out" title="Zoom out (−)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="6.8" cy="6.8" r="4.6"/><path d="M10.2 10.2L14 14M4.7 6.8H8.9"/></svg>Zoom Out</button>
     <div class="sep"></div>
     <button class="tbtn" id="btn-help" title="Show help overlay">? Help</button>
   </header>
@@ -100,6 +104,8 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
       <li>Click a component button in the toolbar to place it at the bench center.</li>
       <li>Lenses: <b>Convex Lens</b> and <b>Concave Lens</b>, each in three variants (A, B, C). Which variant bends light most is part of the investigation — trace a beam through each one, or check the focal length in the properties panel.</li>
       <li>Prisms: <b>Prism-60</b> (equilateral, 60°–60°–60°) and <b>Prism-90</b> (right-isosceles, 45°–45°–90°, right angle at the top).</li>
+      <li><b>Mirror</b>: a flat plane mirror (100 mm) that reflects light from either side.</li>
+      <li><b>Protractor</b>: a 360° measurement overlay (1° ticks, labels every 10°). It never touches the rays; grab its rim, center hub, or baseline to move it, and read its rotation (whole degrees) in the properties panel.</li>
       <li>Drag the component body to move it.</li>
       <li>Drag the rotation handle (circle above the component) to rotate it.</li>
       <li>Click to select; press <b>Delete</b> key or the <b>🗑 Del</b> button to remove.</li>
@@ -113,6 +119,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
     <ul>
       <li><b>Ctrl+Z</b> – Undo</li>
       <li><b>Ctrl+Y</b> – Redo</li>
+      <li><b>+ / −</b> – Zoom in / out · <b>0</b> – Reset zoom</li>
       <li><b>Delete / Backspace</b> – Delete selected</li>
       <li><b>Escape</b> – Deselect</li>
     </ul>
@@ -130,9 +137,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
 // ─────────────────────────────────────────────────────────────
 
 const {
-  Vec2, EPSILON, rad2deg, clamp,
+  Vec2, EPSILON, rad2deg, clamp, normalizeAngle,
   ptInConvex, ptInPolygon,
-  LineSurface, ArcSurface,
+  LineSurface, ArcSurface, MirrorSurface,
   reflect, refractRay,
   cauchyN, WAVELENGTHS, wavelengthToRGB,
   buildConvexGeometry, buildConcaveGeometry, cloneLensGeometry
@@ -531,6 +538,158 @@ class SemicircularBlock extends Component {
 }
 
 // ─────────────────────────────────────────────────────────────
+//  § 2b. MIRROR & MEASUREMENT OVERLAY
+// ─────────────────────────────────────────────────────────────
+
+class PlaneMirror extends Component {
+  constructor(pos, rot, length = 100) {
+    super('mirror', pos, rot);
+    this.length = length;
+    this.label = 'Mirror';
+    const hl = length / 2;
+    this.face = [new Vec2(-hl, 0), new Vec2(hl, 0)];   // local: along X, normal +Y
+    this.verts = [new Vec2(-hl, -3), new Vec2(hl, -3), new Vec2(hl, 3), new Vec2(-hl, 3)];
+    this.surfaces = [new MirrorSurface(this.face[0], this.face[1])];
+  }
+  containsPoint(p) {
+    const lp = this.worldToLocal(p);
+    if (Math.abs(lp.y) > 6) return false;
+    return Math.abs(lp.x) <= this.length / 2 + 4;
+  }
+  getAABB() {
+    const corners = this.verts.map(c => this.localToWorld(c));
+    const xs = corners.map(c => c.x), ys = corners.map(c => c.y);
+    const pad = 5;
+    return { min: new Vec2(Math.min(...xs) - pad, Math.min(...ys) - pad),
+             max: new Vec2(Math.max(...xs) + pad, Math.max(...ys) + pad) };
+  }
+  render(ctx, view) {
+    const hl = this.length / 2;
+    ctx.save();
+    beginComponentTransform(ctx, view, this);
+    // Glass substrate between the reflective face (y = 0) and backing (y = −3).
+    ctx.fillStyle = 'rgba(160,190,230,0.15)';
+    ctx.fillRect(-hl, -3, this.length, 3);
+    // Silvered reflective edge.
+    ctx.strokeStyle = this.selected ? 'rgba(255,215,0,0.9)' : 'rgba(235,244,255,0.95)';
+    ctx.lineWidth = 1.6 / view.zoom;
+    ctx.beginPath(); ctx.moveTo(-hl, 0); ctx.lineTo(hl, 0); ctx.stroke();
+    // Dark backing strip + hatch ticks so reflective and back sides read clearly.
+    ctx.strokeStyle = '#39404c';
+    ctx.lineWidth = 2.6 / view.zoom;
+    ctx.beginPath(); ctx.moveTo(-hl, -3); ctx.lineTo(hl, -3); ctx.stroke();
+    ctx.strokeStyle = 'rgba(120,132,150,0.8)';
+    ctx.lineWidth = 0.8 / view.zoom;
+    ctx.beginPath();
+    for (let x = -hl + 3; x <= hl; x += 7) {
+      ctx.moveTo(x - 3, -6.5); ctx.lineTo(x, -3);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class Protractor extends Component {
+  /** Measurement overlay only: no surfaces, skipped by the tracer, drawn
+   *  in screen space (upright labels, crisp 1° ticks at any zoom). */
+  constructor(pos, rot, radius = 110) {
+    super('protractor', pos, rot);
+    this.radius = radius;
+    this.label = 'Protractor';
+    this.surfaces = [];   // never optical
+    const r = radius;
+    this.verts = [new Vec2(-r, -r), new Vec2(r, -r), new Vec2(r, r), new Vec2(-r, r)];
+  }
+  getRotHandlePos() { return this.localToWorld(new Vec2(0, -(this.radius + 18))); }
+  containsPoint(p) {
+    const lp = this.worldToLocal(p);
+    const r = lp.len(), R = this.radius;
+    if (r <= 12) return true;                                    // center hub
+    if (Math.abs(r - R) <= 10) return true;                      // rim band (ticks + labels)
+    if (Math.abs(lp.y) <= 5 && Math.abs(lp.x) <= R) return true; // 0–180 baseline
+    return false;                                                // interior passes clicks through
+  }
+  getAABB() {
+    const corners = this.verts.map(c => this.localToWorld(c));
+    const xs = corners.map(c => c.x), ys = corners.map(c => c.y);
+    const pad = 5;
+    return { min: new Vec2(Math.min(...xs) - pad, Math.min(...ys) - pad),
+             max: new Vec2(Math.max(...xs) + pad, Math.max(...ys) + pad) };
+  }
+  render(ctx, view) {
+    const c = view.worldToScreen(this.pos);
+    const R = this.radius * view.zoom;
+    if (R < 12) return;                       // too small to be useful
+    const rot = this.rot;
+    const pt = (deg, rad) => {
+      const wa = deg * Math.PI / 180 + rot;   // world angle (CCW, y-up)
+      return new Vec2(c.x + Math.cos(wa) * rad, c.y - Math.sin(wa) * rad);
+    };
+    ctx.save();
+    ctx.strokeStyle = this.selected ? 'rgba(255,215,0,0.75)' : 'rgba(190,215,255,0.6)';
+    ctx.lineWidth = 1;
+    // Faint disc + rim.
+    ctx.fillStyle = 'rgba(120,160,220,0.05)';
+    ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, Math.PI * 2); ctx.stroke();
+    // Ticks: 1° minor, 5° medium, 10° major (batched one path per band).
+    const tickStyle = [
+      [0.055, 'rgba(255,255,255,0.35)'],
+      [0.09,  'rgba(255,255,255,0.55)'],
+      [0.13,  'rgba(220,235,255,0.85)']
+    ];
+    for (let pass = 0; pass < 3; pass++) {
+      ctx.strokeStyle = tickStyle[pass][1];
+      ctx.beginPath();
+      for (let d = 0; d < 360; d++) {
+        const isMinor = d % 5 !== 0;
+        const isMedium = d % 5 === 0 && d % 10 !== 0;
+        const isMajor = d % 10 === 0;
+        if ((pass === 0 && !isMinor) || (pass === 1 && !isMedium) || (pass === 2 && !isMajor)) continue;
+        const p0 = pt(d, R), p1 = pt(d, R * (1 - tickStyle[pass][0]));
+        ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y);
+      }
+      ctx.stroke();
+    }
+    // 0–180 baseline through the center (rotates with the protractor).
+    ctx.strokeStyle = 'rgba(150,200,255,0.8)';
+    ctx.lineWidth = 1;
+    let a0 = pt(0, R), a180 = pt(180, R);
+    ctx.beginPath(); ctx.moveTo(a0.x, a0.y); ctx.lineTo(a180.x, a180.y); ctx.stroke();
+    // 0° reference arrow at the rim.
+    ctx.strokeStyle = 'rgba(255,215,0,0.9)';
+    ctx.lineWidth = 2;
+    const z0 = pt(0, R), z1 = pt(0, R + 9);
+    ctx.beginPath(); ctx.moveTo(z0.x, z0.y); ctx.lineTo(z1.x, z1.y); ctx.stroke();
+    // Center mark.
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 5, c.y); ctx.lineTo(c.x + 5, c.y);
+    ctx.moveTo(c.x, c.y - 5); ctx.lineTo(c.x, c.y + 5);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.arc(c.x, c.y, 1.6, 0, Math.PI * 2); ctx.fill();
+    // Numerical labels every 10°, upright (screen-space text).
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let d = 0; d < 360; d += 10) {
+      const lp = pt(d, R * 0.82);
+      ctx.fillText(d + '°', lp.x, lp.y);
+    }
+    if (this.selected) {
+      const deg = Math.round(normalizeAngle(rot) * 180 / Math.PI);
+      ctx.fillStyle = 'rgba(255,215,0,0.95)';
+      ctx.font = 'bold 12px system-ui';
+      ctx.fillText(deg + '°', c.x, c.y - 14);
+    }
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 //  § 3. RAY TRACING ENGINE
 // ─────────────────────────────────────────────────────────────
 
@@ -554,7 +713,9 @@ function traceRay(sample, components) {
   while (!sample.terminated && sample.depth < MAX_DEPTH && sample.weight > MIN_WEIGHT) {
     let bestHit = null, bestT = Infinity, bestComp = null, bestSurf = null;
     for (const comp of components) {
-      if (comp.type === 'raybox') continue;
+      // Ray boxes emit light; protractors are measurement overlays and must
+      // never intersect, refract, reflect or block a ray.
+      if (comp.type === 'raybox' || comp.type === 'protractor') continue;
       const cosR = Math.cos(-comp.rot), sinR = Math.sin(-comp.rot);
       const dx = sample.origin.x - comp.pos.x, dy = sample.origin.y - comp.pos.y;
       const localO = new Vec2(dx * cosR - dy * sinR, dx * sinR + dy * cosR);
@@ -581,6 +742,21 @@ function traceRay(sample, components) {
     }
     const outward = bestHit.normal;
     const alignment = sample.direction.dot(outward);
+    // Plane mirror: two-sided specular reflection with the law of reflection
+    // r = d − 2(d·n)n (shared core reflect()). Wavelength, weight and the
+    // current medium are preserved; the origin is offset along the reflected
+    // direction to avoid immediate self-intersection.
+    if (bestSurf.mirror) {
+      if (Math.abs(alignment) <= EPSILON) {
+        sample.origin = bestHit.point.add(sample.direction.mul(EPSILON * 10));
+        continue;
+      }
+      sample.path.push(bestHit.point);
+      sample.direction = reflect(sample.direction, alignment < 0 ? outward : outward.mul(-1));
+      sample.origin = bestHit.point.add(sample.direction.mul(EPSILON * 10));
+      sample.depth++;
+      continue;
+    }
     let entering, interfaceNormal, n1, n2;
     if (alignment < -EPSILON) {
       entering = true;
@@ -669,6 +845,10 @@ function generateEmission(raybox, whiteLight = false) {
 //  § 5. VIEW / CAMERA
 // ─────────────────────────────────────────────────────────────
 
+const ZOOM_STEP = 1.2;
+const ZOOM_MIN = 0.3;
+const ZOOM_MAX = 8;
+
 class View {
   constructor(canvas) {
     this.canvas = canvas;
@@ -685,8 +865,15 @@ class View {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.screenW = rect.width;
     this.screenH = rect.height;
-    this.zoom = Math.min(this.screenW / 800, this.screenH / 400);
+    this.fitZoom = Math.min(this.screenW / 800, this.screenH / 400);
+    this.zoom = this.fitZoom;
   }
+  // worldToScreen maps cameraPos exactly onto the screen center, so scaling
+  // zoom alone is a zoom about the visible workspace center.
+  zoomBy(factor) { this.zoom = clamp(this.zoom * factor, ZOOM_MIN, ZOOM_MAX); }
+  zoomIn() { this.zoomBy(ZOOM_STEP); }
+  zoomOut() { this.zoomBy(1 / ZOOM_STEP); }
+  resetZoom() { this.zoom = this.fitZoom; }
   worldToScreen(v) {
     return new Vec2(
       (v.x - this.cameraPos.x) * this.zoom + this.screenW / 2,
@@ -1040,6 +1227,8 @@ function createComponent(type, efl) {
     case 'prism60': comp = new Prism(pos, 0, { variant: '60' }); break;
     case 'prism90': comp = new Prism(pos, 0, { variant: '90' }); break;
     case 'semicircle': comp = new SemicircularBlock(pos, 0); break;
+    case 'mirror': comp = new PlaneMirror(pos, 0); break;
+    case 'protractor': comp = new Protractor(pos, 0); break;
   }
   if (comp) pushCommand(new AddCommand(comp));
 }
@@ -1089,14 +1278,21 @@ function updatePropsPanel() {
     html += `<label>Position <span>${Math.round(c.pos.x)}, ${Math.round(c.pos.y)} mm</span></label>`;
     html += `<label>Rotation <span>${rad2deg(c.rot).toFixed(1)}°</span></label>`;
   } else {
-    const names = { convex: 'Convex Lens', concave: 'Concave Lens', flatblock: 'Flat Block', prism: 'Prism', semicircle: 'Semicircle' };
+    const names = { convex: 'Convex Lens', concave: 'Concave Lens', flatblock: 'Flat Block', prism: 'Prism', semicircle: 'Semicircle', mirror: 'Mirror', protractor: 'Protractor' };
     title.textContent = c.label || names[c.type] || c.type;
     if (c.type === 'convex' || c.type === 'concave') {
       html += `<label>EFL (mm) <input type="number" value="${c.efl}" onchange="setEFL(${c.id}, this.value)" /></label>`;
       html += `<label>Radius <span>${c.radius ? c.radius.toFixed(1) : '—'} mm</span></label>`;
     }
+    if (c.type === 'mirror') {
+      html += `<label>Length <span>${c.length} mm</span></label>`;
+    }
     html += `<label>Position <span>${Math.round(c.pos.x)}, ${Math.round(c.pos.y)} mm</span></label>`;
-    html += `<label>Rotation <span>${rad2deg(c.rot).toFixed(1)}°</span></label>`;
+    // Protractor readings are a measuring tool: whole degrees (1° precision).
+    const rotText = c.type === 'protractor'
+      ? (((Math.round(rad2deg(c.rot)) % 360) + 360) % 360) + '°'
+      : rad2deg(c.rot).toFixed(1) + '°';
+    html += `<label>Rotation <span>${rotText}</span></label>`;
     html += `<button class="del" onclick="deleteSelected()">Delete</button>`;
     html += ` <button onclick="duplicateSelected()">Duplicate</button>`;
   }
@@ -1161,6 +1357,8 @@ window.duplicateSelected = function() {
     case 'flatblock': dup = new FlatBlock(p, c.rot, c.w, c.h); break;
     case 'prism': dup = new Prism(p, c.rot, { variant: c.variant }); break;
     case 'semicircle': dup = new SemicircularBlock(p, c.rot, c.radius); break;
+    case 'mirror': dup = new PlaneMirror(p, c.rot, c.length); break;
+    case 'protractor': dup = new Protractor(p, c.rot, c.radius); break;
   }
   if (dup) pushCommand(new AddCommand(dup));
 };
@@ -1233,6 +1431,12 @@ function onKeyDown(e) {
   else if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
   else if (e.key === 'Delete' || e.key === 'Backspace') { if (app.selected) { e.preventDefault(); deleteSelected(); } }
   else if (e.key === 'Escape') { selectComp(null); }
+  // Zoom shortcuts; ignored while typing in a form field.
+  else if (!/^(INPUT|SELECT|TEXTAREA)$/.test((e.target && e.target.tagName) || '')) {
+    if (e.key === '+' || e.key === '=') { e.preventDefault(); view.zoomIn(); }
+    else if (e.key === '-' || e.key === '_') { e.preventDefault(); view.zoomOut(); }
+    else if (e.key === '0') { e.preventDefault(); view.resetZoom(); }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1255,6 +1459,8 @@ function initToolbar() {
   bind('btn-prism60', () => createComponent('prism60'));
   bind('btn-prism90', () => createComponent('prism90'));
   bind('btn-semi', () => createComponent('semicircle'));
+  bind('btn-mirror', () => createComponent('mirror'));
+  bind('btn-protractor', () => createComponent('protractor'));
   bind('btn-delete', () => deleteSelected());
   bind('btn-clear', () => {
     const comps = [...app.components];
@@ -1278,6 +1484,8 @@ function initToolbar() {
   });
   bind('btn-undo', () => undo());
   bind('btn-redo', () => redo());
+  bind('btn-zoomin', () => view.zoomIn());
+  bind('btn-zoomout', () => view.zoomOut());
   bind('btn-white', () => {
     app.whiteLight = !app.whiteLight;
     document.getElementById('btn-white').classList.toggle('active', app.whiteLight);
@@ -1309,7 +1517,12 @@ function frame(time) {
     }
     drawRays(ctx, view, samplesCache, app.whiteLight);
   }
-  for (const c of app.components) c.render(ctx, view);
+  for (const c of app.components) {
+    if (c.type !== 'protractor') c.render(ctx, view);   // optics first
+  }
+  for (const c of app.components) {
+    if (c.type === 'protractor') c.render(ctx, view);   // measurement overlays above rays/components
+  }
   for (const c of app.components) {
     drawSelectionOutline(ctx, view, c);
     drawRotationHandle(ctx, view, c);

@@ -387,6 +387,47 @@ function runOpticsCoreTests(ctx) {
   check(approx(C.cauchyN(550), 1.5, 0.02), 'cauchyN(550) \u2248 design index 1.5');
   var blue = C.wavelengthToRGB(450), red = C.wavelengthToRGB(650);
   check(blue.b > blue.r && red.r > red.b, 'wavelengthToRGB: 450nm reads blue, 650nm reads red');
+
+  // ─── 12. Plane mirror (shared core surface) ────────────────
+  log('<h2>12. MirrorSurface: law of reflection, two-sided, rotated placement</h2>');
+  var ms = new C.MirrorSurface(new C.Vec2(0, -50), new C.Vec2(0, 50));
+  check(ms.mirror === true && ms.material === 'mirror', 'MirrorSurface flagged mirror');
+  check(approx(ms.len, 100, 1e-12) && approx(ms.normal.x, 1, 1e-12) && approx(ms.normal.y, 0, 1e-12),
+        '100 mm face with unit normal (+1, 0)');
+  var mh = ms.intersect(new C.Vec2(-100, 10), new C.Vec2(1, 0));
+  check(mh !== null && mh.surface === ms && approx(mh.point.x, 0, 1e-9) && approx(mh.point.y, 10, 1e-9),
+        'hits the face at the exact point, participates in nearest-hit data');
+  // 20° incidence from the +x side onto the vertical mirror.
+  var d20 = C.Vec2.fromAngle(Math.PI - 20 * Math.PI / 180);   // travels leftward-up
+  var mh20 = ms.intersect(new C.Vec2(200, -73), d20);
+  var n20 = ms.normalAgainst(d20);
+  var r20 = C.reflect(d20, n20);
+  var cosI = Math.abs(d20.dot(ms.normal)), cosR = Math.abs(r20.dot(ms.normal));
+  check(mh20 !== null, '20° ray hits the mirror');
+  check(approx(cosI, cosR, 1e-12),
+        'law of reflection: θi = θr (' + (Math.acos(cosI) * 180 / Math.PI).toFixed(6) + '° = ' +
+        (Math.acos(cosR) * 180 / Math.PI).toFixed(6) + '°)');
+  check(approx(r20.y, d20.y, 1e-12) && approx(r20.x, -d20.x, 1e-12),
+        'tangential component kept, normal component flipped');
+  check(approx(r20.len(), 1, 1e-12), 'reflected direction stays unit length (intensity basis preserved)');
+  // Two-sidedness: head-on from each side retroreflects.
+  var fromFront = C.reflect(new C.Vec2(1, 0), ms.normalAgainst(new C.Vec2(1, 0)));
+  var fromBack = C.reflect(new C.Vec2(-1, 0), ms.normalAgainst(new C.Vec2(-1, 0)));
+  check(approx(fromFront.x, -1, 1e-12) && approx(fromBack.x, 1, 1e-12),
+        'reflects from BOTH sides (front and back head-on rays return)');
+  // Rotated/moved placement (mirrors a moved+rotated component): face rotated
+  // 30° about (60, 0) — normal at 30°, horizontal ray must reflect to 240°.
+  var msw = new C.MirrorSurface(C.transformPoint(new C.Vec2(0, -50), new C.Vec2(60, 0), Math.PI / 6),
+                                C.transformPoint(new C.Vec2(0, 50), new C.Vec2(60, 0), Math.PI / 6));
+  var mhw = msw.intersect(new C.Vec2(-200, 0), new C.Vec2(1, 0));
+  check(mhw !== null && approx(mhw.point.x, 60, 1e-6) && approx(mhw.point.y, 0, 1e-6),
+        'rotated mirror hit exactly at its displayed position (60, 0)');
+  var rw = C.reflect(new C.Vec2(1, 0), msw.normalAgainst(new C.Vec2(1, 0)));
+  check(approx(rw.x, Math.cos(4 * Math.PI / 3), 1e-12) && approx(rw.y, Math.sin(4 * Math.PI / 3), 1e-12),
+        'rotated mirror: reflection follows the rotated normal (dir → 240°)');
+  var msClone = ms.clone();
+  check(msClone.mirror === true && msClone.normal.x === ms.normal.x &&
+        msClone.a.y !== undefined && msClone.a !== ms.a, 'clone preserves mirror flags with fresh geometry');
 }
 /*__TESTS_END__*/
 

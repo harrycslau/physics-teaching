@@ -489,6 +489,47 @@ snapA["outline"][0].x = 9999     # mutating the clone must not touch the source
 check(gA["outline"][0].x != 9999, "snapshots are deep copies (no shared mutable state)")
 
 # ============================================================
+# Test 13: Plane mirror — law of reflection (independent check)
+# ============================================================
+print("\n--- Test 13: Mirror law of reflection ---")
+
+def mirror_reflect(d, n):
+    """Law of reflection against a surface with unit normal n (either side)."""
+    if d.dot(n) > 0:
+        n = n.mul(-1)
+    return d.sub(n.mul(2 * d.dot(n)))
+
+def rot(p, ang):
+    c, s = math.cos(ang), math.sin(ang)
+    return Vec2(p.x * c - p.y * s, p.x * s + p.y * c)
+
+# Vertical mirror face from (0,-50) to (0,50): normal (1,0).
+n_face = Vec2(1.0, 0.0)
+d20 = Vec2(-math.cos(math.radians(20)), math.sin(math.radians(20)))  # 20° incidence
+r20 = mirror_reflect(d20, n_face)
+cos_i, cos_r = abs(d20.dot(n_face)), abs(r20.dot(n_face))
+check(approx(cos_i, cos_r, 1e-12), f"mirror 20°: θi=θr ({math.degrees(math.acos(cos_i)):.6f}° = {math.degrees(math.acos(cos_r)):.6f}°)")
+check(approx(r20.x, -d20.x, 1e-12) and approx(r20.y, d20.y, 1e-12), "mirror: normal flipped, tangential kept")
+check(approx(r20.len(), 1.0, 1e-12), "mirror: reflected direction stays unit (intensity preserved)")
+# Two-sided: head-on from both directions retroreflects.
+check(approx(mirror_reflect(Vec2(1, 0), n_face).x, -1, 1e-12), "mirror reflects from front side")
+check(approx(mirror_reflect(Vec2(-1, 0), n_face).x, 1, 1e-12), "mirror reflects from back side (two-sided)")
+# Rotated (30°) and moved (center (60,0)) mirror: horizontal ray reflects to 240°.
+ang = math.radians(30)
+n_rot = rot(Vec2(1, 0), ang)
+r_rot = mirror_reflect(Vec2(1, 0), n_rot)
+check(approx(r_rot.x, math.cos(math.radians(240)), 1e-12) and
+      approx(r_rot.y, math.sin(math.radians(240)), 1e-12),
+      f"rotated mirror: dir → 240° (got ({r_rot.x:.4f}, {r_rot.y:.4f}))")
+# Hit point on the rotated face (segment through (60,0) along 30°) at y=0 is exactly (60,0).
+a = rot(Vec2(0, -50), ang).add(Vec2(60, 0))
+b = rot(Vec2(0, 50), ang).add(Vec2(60, 0))
+t = (0 - a.y) / (b.y - a.y)
+hit = a.add(b.sub(a).mul(t))
+check(approx(hit.x, 60, 1e-9), f"rotated mirror hit at displayed x=60 (got {hit.x:.6f})")
+print(f"  θi=θr at 20°, two-sided, rotated case dir=({r_rot.x:.4f},{r_rot.y:.4f}), hit x={hit.x:.3f}")
+
+# ============================================================
 # Summary
 # ============================================================
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
