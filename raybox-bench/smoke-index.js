@@ -322,6 +322,12 @@ var strokes = finalCtx2.calls.filter(function (c) { return !c.set && c.name === 
 var drawn = finalCtx2.calls.filter(function (c) { return !c.set && c.name === "drawImage"; });
 check(strokes.length === 3 && drawn.length === 0 && accumulationStrokes() === beamBefore,
       "9b. discrete rays drawn directly, accumulation buffers untouched");
+var yComp = finalCtx2.calls.filter(function (c) { return c.set && c.name === "globalCompositeOperation"; });
+var yAlpha = finalCtx2.calls.filter(function (c) { return c.set && c.name === "strokeStyle"; });
+check(yComp.length === 3 && yComp.every(function (c) { return c.args[0] === "source-over"; }),
+      "9b. yellow discrete rays keep source-over compositing");
+check(yAlpha.length === 3 && yAlpha.every(function (c) { return /,0\.85\)$/.test(c.args[0]); }),
+      "9b. yellow discrete ray alpha unchanged (0.85)");
 globalThis.setSlit("none");
 
 // 9c. white-light continuous keeps spectral per-wavelength strokes
@@ -331,6 +337,32 @@ var finalCtx3 = makeCtx();
 api.drawRays(finalCtx3, view, wlSamples, true);
 var wlComposites = finalCtx3.calls.filter(function (c) { return !c.set && c.name === "drawImage"; });
 check(wlComposites.length === 3, "9c. white-light continuous beam uses the same bright 3-pass path");
+
+// 9d. white-light DISCRETE rays: additive, order-independent spectral layers
+globalThis.setSlit("single");
+var wDisc = api.generateEmission(api.app.raybox, true);   // 1 ray × 11 wavelengths ≤ 35 → discrete branch
+check(wDisc.length === 11 && wDisc.every(function (s) { return s.path.length >= 1; }),
+      "9d. single-slit white = 11 coincident spectral rays, discrete path");
+for (var q2 = 0; q2 < wDisc.length; q2++) api.traceRay(wDisc[q2], api.app.components);
+var finalCtx4 = makeCtx();
+api.drawRays(finalCtx4, view, wDisc, true);
+var wComp = finalCtx4.calls.filter(function (c) { return c.set && c.name === "globalCompositeOperation"; });
+var wStroke = finalCtx4.calls.filter(function (c) { return c.set && c.name === "strokeStyle"; });
+var wStrokes = finalCtx4.calls.filter(function (c) { return !c.set && c.name === "stroke"; });
+check(wComp.length === 11 && wComp.every(function (c) { return c.args[0] === "lighter"; }),
+      "9d. every white spectral layer drawn with 'lighter' compositing (red can no longer cover others)");
+var wAlphas = wStroke.map(function (c) { return parseFloat(/,([\d.]+)\)$/.exec(c.args[0])[1]); });
+check(wAlphas.every(function (a) { return a >= 0.10 && a <= 0.18; }),
+      "9d. per-wavelength alpha reduced for additive blending (all = " + wAlphas[0] + ")");
+check(wStroke.length === 11 && wStrokes.length === 11,
+      "9d. one additive stroke per wavelength layer");
+// Drawing order must not matter: same multiset of colors+alphas whether red
+// is drawn first or last.
+var last = wStroke[wStroke.length - 1].args[0], first = wStroke[0].args[0];
+check(/,0\.15\)$/.test(last) && /,0\.15\)$/.test(first) && first !== last,
+      "9d. first and last (violet/red) layers use identical alpha — no dominant final draw");
+// No slit restored afterwards; wide continuous white path untouched (9c).
+globalThis.setSlit("none");
 
 // 10. one full render frame with rays tracing through the live scene
 try {

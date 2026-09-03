@@ -788,9 +788,16 @@ function drawRays(ctx, view, samples, whiteLight) {
     for (const s of samples) {
       const col = whiteLight ? wavelengthToRGB(s.wavelength) : { r: 255, g: 215, b: 0 };
       ctx.save();
-      ctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},0.85)`;
+      // White-light spectral layers are coincident before dispersion: blend
+      // them additively so 11 wavelengths sum to white instead of the
+      // last-drawn red wavelength occluding the rest (order-independent).
+      // Ordinary yellow rays keep the original source-over appearance.
+      ctx.globalCompositeOperation = whiteLight ? 'lighter' : 'source-over';
+      const alpha = whiteLight ? 0.15 : 0.85;
+      const glowAlpha = whiteLight ? 0.08 : 0.4;
+      ctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},${alpha})`;
       ctx.lineWidth = 2;
-      ctx.shadowColor = `rgba(${col.r},${col.g},${col.b},0.4)`;
+      ctx.shadowColor = `rgba(${col.r},${col.g},${col.b},${glowAlpha})`;
       ctx.shadowBlur = 6;
       ctx.beginPath();
       for (let i = 0; i < s.path.length; i++) {
