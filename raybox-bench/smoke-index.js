@@ -645,8 +645,38 @@ protoComp.render(pctx, view);
 var pMove = pctx.__calls.filter(function (c) { return !c.set && c.name === "moveTo"; });
 check(pMove.length >= 360, "12. full 360° of 1° ticks drawn (" + pMove.length + " segments)");
 var pTexts = pctx.__calls.filter(function (c) { return !c.set && c.name === "fillText"; });
-check(pTexts.length === 37, "12. 36 labels every 10° + selected-rotation readout (got " + pTexts.length + ")");
+// At the fitted zoom R = 110·1.5 = 165 px → both rings label every 10°:
+// 36 outer + 36 inner + 1 selected readout = 73 text draws.
+check(pTexts.length === 73, "12. 36 outer + 36 inner labels + rotation readout (got " + pTexts.length + ")");
 check(pTexts[pTexts.length - 1].args[0] === "37°", "12. center readout rounds 37.4° → 37°");
+var outerTexts = pTexts.slice(0, 36).map(function (c) { return c.args[0]; });
+var innerTexts = pTexts.slice(36, 72).map(function (c) { return c.args[0]; });
+check(outerTexts[0] === "0°" && outerTexts[9] === "90°" && outerTexts[18] === "0°" &&
+      outerTexts[27] === "90°",
+      "12. outer scale reads 0–90–0–90 (folded on the baseline line)");
+check(outerTexts[14] === "40°" && outerTexts[31] === "50°",
+      "12. outer fold: bearing 140° → 40°, 310° → 50°");
+check(innerTexts[0] === "0°" && innerTexts[13] === "130°" && innerTexts[35] === "350°",
+      "12. inner scale is the full 0–360 bearing");
+var pFonts = pctx.__calls.filter(function (c) { return c.set && c.name === "font"; });
+check(pFonts[0].args[0] === "bold 11px system-ui" && pFonts[1].args[0] === "8px system-ui",
+      "12. outer labels prominent (bold 11px), inner labels smaller (8px)");
+// Both rings label the SAME bearings (every 10°) → aligned with the shared
+// 1°/5°/10° tick bands (ticks unchanged above).
+// Overlap safety at small radii: drop the zoom so R crosses both thresholds.
+var zoomKeep = view.zoom;
+view.zoom = 0.62;                    // R = 68 px < 75 → outer step 30°, inner step 30°
+var pctxSmall = makeCtx();
+protoComp.render(pctxSmall, view);
+var smallTexts = pctxSmall.__calls.filter(function (c) { return !c.set && c.name === "fillText"; });
+check(smallTexts.length === 12 + 12 + 1,
+      "12. small radius thins labels to 30° steps on both rings (got " + smallTexts.length + " incl. readout)");
+view.zoom = 1.1;                     // R = 121 px → outer 10°, inner 20°
+var pctxMid = makeCtx();
+protoComp.render(pctxMid, view);
+var midTexts = pctxMid.__calls.filter(function (c) { return !c.set && c.name === "fillText"; });
+check(midTexts.length === 36 + 18 + 1, "12. mid radius: outer 10° / inner 20° steps");
+view.zoom = zoomKeep;
 protoComp.rot = 37.6 * Math.PI / 180;
 api.selectComp(protoComp);
 check(elements["props-title"].textContent === "Protractor" &&

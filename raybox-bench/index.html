@@ -105,7 +105,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
       <li>Lenses: <b>Convex Lens</b> and <b>Concave Lens</b>, each in three variants (A, B, C). Which variant bends light most is part of the investigation — trace a beam through each one, or check the focal length in the properties panel.</li>
       <li>Prisms: <b>Prism-60</b> (equilateral, 60°–60°–60°) and <b>Prism-90</b> (right-isosceles, 45°–45°–90°, right angle at the top).</li>
       <li><b>Mirror</b>: a flat plane mirror (100 mm) that reflects light from either side.</li>
-      <li><b>Protractor</b>: a 360° measurement overlay (1° ticks, labels every 10°). It never touches the rays; grab its rim, center hub, or baseline to move it, and read its rotation (whole degrees) in the properties panel.</li>
+      <li><b>Protractor</b>: a 360° measurement overlay (1° ticks; prominent outer 0–90–0 scale, smaller inner 0–360° scale, labelled every 10°). It never touches the rays; grab its rim, center hub, or baseline to move it, and read its rotation (whole degrees) in the properties panel.</li>
       <li>Drag the component body to move it.</li>
       <li>Drag the rotation handle (circle above the component) to rotate it.</li>
       <li>Click to select; press <b>Delete</b> key or the <b>🗑 Del</b> button to remove.</li>
@@ -591,7 +591,8 @@ class PlaneMirror extends Component {
 
 class Protractor extends Component {
   /** Measurement overlay only: no surfaces, skipped by the tracer, drawn
-   *  in screen space (upright labels, crisp 1° ticks at any zoom). */
+   *  in screen space (upright dual scales — outer 0–90–0, inner 0–360 — and
+   *  crisp 1° ticks at any zoom). */
   constructor(pos, rot, radius = 110) {
     super('protractor', pos, rot);
     this.radius = radius;
@@ -670,13 +671,30 @@ class Protractor extends Component {
     ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.beginPath(); ctx.arc(c.x, c.y, 1.6, 0, Math.PI * 2); ctx.fill();
-    // Numerical labels every 10°, upright (screen-space text).
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.font = '10px system-ui';
+    // Dual scales, both aligned to the same 1° ticks (labels sit just inside
+    // the major-tick band at multiples of 10° of bearing). Outer scale is the
+    // bidirectional 0–90–0 reading (angle from the baseline LINE, so it runs
+    // 0→90→0→90→0 around the circle) and carries the prominent labels; the
+    // 0–360 scale lives on a smaller inner ring. Text is drawn in screen
+    // space → always upright; positions orbit with the protractor's rotation.
+    // Steps widen at small radii so labels never overlap or crowd.
+    const outerStep = R >= 120 ? 10 : 30;
+    const innerStep = R >= 160 ? 10 : R >= 80 ? 20 : 30;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    for (let d = 0; d < 360; d += 10) {
-      const lp = pt(d, R * 0.82);
+    // Outer ring: 0–90–0, bold and bright.
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.font = 'bold 11px system-ui';
+    for (let d = 0; d < 360; d += outerStep) {
+      const v = 90 - Math.abs(90 - (d % 180));           // fold 0–180 onto 0–90–0
+      const lp = pt(d, R * 0.78);
+      ctx.fillText(v + '°', lp.x, lp.y);
+    }
+    // Inner ring: full 0–360 bearing, smaller and dimmer.
+    ctx.fillStyle = 'rgba(205,222,245,0.62)';
+    ctx.font = '8px system-ui';
+    for (let d = 0; d < 360; d += innerStep) {
+      const lp = pt(d, R * 0.62);
       ctx.fillText(d + '°', lp.x, lp.y);
     }
     if (this.selected) {
