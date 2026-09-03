@@ -89,13 +89,17 @@ function check(cond, msg) {
   else { failed++; buffer.push("FAIL: " + msg); }
 }
 
-function buttonInnerText(id) {
-  var m = html.match(new RegExp('<button[^>]*id="' + id + '"[^>]*>([^<]*)</button>'));
+function buttonInner(id) {
+  var m = html.match(new RegExp('<button[^>]*id="' + id + '"[^>]*>([\\s\\S]*?)</button>'));
   return m ? m[1] : null;
 }
+function buttonInnerText(id) {
+  var inner = buttonInner(id);
+  return inner === null ? null : inner.replace(/<svg[\s\S]*?<\/svg>/g, "").trim();
+}
 var LENS_BUTTONS = {
-  "btn-convex100": "CV lens (thick)", "btn-convex200": "CV lens (mid)", "btn-convex400": "CV lens (thin)",
-  "btn-concave100": "CC lens (thick)", "btn-concave200": "CC lens (mid)", "btn-concave400": "CC lens (thin)"
+  "btn-convex100": "Convex Lens A", "btn-convex200": "Convex Lens B", "btn-convex400": "Convex Lens C",
+  "btn-concave100": "Concave Lens A", "btn-concave200": "Concave Lens B", "btn-concave400": "Concave Lens C"
 };
 Object.keys(LENS_BUTTONS).forEach(function (id) {
   var txt = buttonInnerText(id);
@@ -104,14 +108,82 @@ Object.keys(LENS_BUTTONS).forEach(function (id) {
 });
 check(buttonInnerText("btn-prism60") === "Prism-60", "0. toolbar has Prism-60 button");
 check(buttonInnerText("btn-prism90") === "Prism-90", "0. toolbar has Prism-90 button");
-check(/title="[^"]*strongest curvature[^"]*"/.test(html) && !/title="[^"]*f=-?\u2212?\d+mm/.test(html),
-      "0. lens tooltips describe curvature, not focal numbers");
-check(html.indexOf("Lens C 100") === -1 && html.indexOf("Triangular prism") === -1,
-      "0. old numeric lens/prism labels removed from HTML");
-check(/aria-label="CV lens, thick"/.test(html) && /aria-label="Prism 90, right-angle"/.test(html),
+// Labels/tooltips/aria must not reveal focal length, strength or thickness.
+var LEAK = /curvature|focal|thick|thin|strong|weak|powerful|\d+\s*mm|f\s*=/i;
+Object.keys(LENS_BUTTONS).forEach(function (id) {
+  var ti = html.match(new RegExp('<button[^>]*id="' + id + '"[^>]*title="([^"]*)"'));
+  var al = html.match(new RegExp('<button[^>]*id="' + id + '"[^>]*aria-label="([^"]*)"'));
+  check(ti && !LEAK.test(ti[1]), '0. #' + id + ' tooltip is neutral: "' + (ti ? ti[1] : "?") + '"');
+  check(al && !LEAK.test(al[1]), '0. #' + id + ' aria-label is neutral: "' + (al ? al[1] : "?") + '"');
+  check(ti && /variant [ABC]/.test(ti[1]) && al &&
+        al[1].toLowerCase() === LENS_BUTTONS[id].toLowerCase(),
+        "0. #" + id + " tooltip/aria identify the variant letter only (A/B/C)");
+});
+check(html.indexOf("Lens C 100") === -1 && html.indexOf("Triangular prism") === -1 &&
+      html.indexOf("CV lens") === -1 && html.indexOf("CC lens") === -1,
+      "0. old numeric and CV/CC strength labels removed from HTML");
+check(/aria-label="Convex lens A"/.test(html) && /aria-label="Prism 90, right-angle"/.test(html),
       "0. accessible aria-labels present");
 check(html.indexOf("Prism-60</b> (equilateral") !== -1 || /Prism-60[\s\S]{0,80}equilateral/i.test(html),
       "0. help overlay describes both prism variants");
+check(/variants \(A, B, C\)/i.test(html), "0. help overlay matches neutral A/B/C lens naming");
+
+// 0b. every placeable component button carries a leading, aria-hidden SVG icon
+var ICON_BUTTONS = ["btn-convex100", "btn-convex200", "btn-convex400",
+                    "btn-concave100", "btn-concave200", "btn-concave400",
+                    "btn-flat", "btn-prism60", "btn-prism90", "btn-semi"];
+ICON_BUTTONS.forEach(function (id) {
+  var inner = buttonInner(id);
+  check(inner !== null && /^<svg\b[^>]*aria-hidden="true"[^>]*>/.test(inner.trim()),
+        "0b. #" + id + " starts with an aria-hidden SVG icon before the text");
+  var inner2 = inner.replace(/<svg[\s\S]*?<\/svg>/, "").trim();
+  check(inner2.length > 0, "0b. #" + id + " keeps its descriptive text label");
+});
+check(ICON_BUTTONS.every(function (id) {
+  var m = buttonInner(id).match(/viewBox="0 0 16 16"/);
+  return !!m;
+}), "0b. all component icons share one 16×16 viewBox (consistent sizing)");
+check(/\.tbtn svg\{width:19px;height:19px/.test(html) && /\.tbtn svg\{width:15px;height:15px\}/.test(html),
+      "0b. icons enlarged to 19px on desktop, compact 15px on narrow screens");
+check(/stroke-width:1\.5/.test(html), "0b. icon strokes thickened to 1.5 for clarity");
+// Variant-specific icons: each lens preset keeps its recognizable profile
+// (labels stay neutral A/B/C; the drawing order of arcs must flatten A→C).
+function iconPath(id) { return buttonInner(id).match(/d="([^"]+)"/)[1]; }
+function firstArc(pathD) { return parseFloat(/A\s*([\d.]+)/.exec(pathD)[1]); }
+var cvIcons = ["btn-convex100", "btn-convex200", "btn-convex400"].map(iconPath);
+var ccIcons = ["btn-concave100", "btn-concave200", "btn-concave400"].map(iconPath);
+check(cvIcons.every(function (d) { return /^M8 1\.5A/.test(d); }) &&
+      new Set(cvIcons).size === 3,
+      "0b. convex icons are three distinct biconvex profiles");
+check(ccIcons.every(function (d) { return /^M4\.5 1\.5H/.test(d); }) &&
+      new Set(ccIcons).size === 3,
+      "0b. concave icons are three distinct biconcave profiles");
+var cvR = cvIcons.map(firstArc), ccR = ccIcons.map(firstArc);
+check(cvR[0] < cvR[1] && cvR[1] < cvR[2],
+      "0b. convex icons flatten A→C (arc radii " + cvR.join("/") + ")");
+check(ccR[0] < ccR[1] && ccR[1] < ccR[2],
+      "0b. concave icons flatten A→C (arc radii " + ccR.join("/") + ")");
+check(cvR[0] > 6.5 && ccR[0] > 6.5,
+      "0b. all arc radii exceed half-chord (SVG arcs are drawable)");
+var pr60 = iconPath("btn-prism60");
+var pr90 = iconPath("btn-prism90");
+check(/M8 2L14\.75 13\.7H1\.25Z/.test(pr60), "0b. Prism-60 icon is an equilateral triangle");
+check(/M8 4\.85L14\.75 11\.6H1\.25Z/.test(pr90), "0b. Prism-90 icon: right angle on top, hypotenuse base");
+check(/<rect /.test(buttonInner("btn-flat")), "0b. Block icon is a rectangle");
+check(/A6\.5 6\.5 0 0 1/.test(buttonInner("btn-semi")), "0b. Semi icon is a half-disc (single 6.5-radius arc)");
+
+// 0c. White toggle moved next to Power, functionality/tooltip intact
+var iPower = html.indexOf('id="btn-power"');
+var iWhite = html.indexOf('id="btn-white"');
+var iSlitNone = html.indexOf('id="btn-slit-none"');
+check(iPower !== -1 && iWhite > iPower && iWhite < iSlitNone,
+      "0c. White toggle sits immediately after Power");
+check(html.indexOf('<button class="tbtn" id="btn-white" title="Toggle white-light dispersion mode">☀ White</button>') !== -1,
+      "0c. White button keeps its tooltip and label");
+check(html.indexOf("id=\"btn-white\"", html.indexOf("id=\"btn-undo\"")) === -1,
+      "0c. only one White button remains (old position removed)");
+check(/bind\('btn-white'/.test(html) && /getElementById\('btn-white'\)\.classList\.toggle\('active'/.test(html),
+      "0c. White binding and active-state toggle unchanged");
 
 // ── Load real production code ────────────────────────────────
 eval(readFile(dir + "/optics-core.js"));
@@ -143,12 +215,14 @@ var concave = api.app.components.find(function (c) { return c.type === "concave"
 var prism60 = api.app.components.find(function (c) { return c.type === "prism" && c.variant === "60"; });
 var prism90 = api.app.components.find(function (c) { return c.type === "prism" && c.variant === "90"; });
 check(!!prism60 && !!prism90, "2. both prism variants placed independently");
-check(convex.label === "CV lens (mid)" && concave.label === "CC lens (mid)",
-      "2. lens labels derived from preset EFL");
-check(api.lensLabel(-100) === "CC lens (thick)" && api.lensLabel(200) === "CV lens (mid)" &&
-      api.lensLabel(400) === "CV lens (thin)" && api.lensLabel(-400) === "CC lens (thin)",
-      "2. lensLabel mapping for all six presets");
-check(api.lensLabel(150) === "Convex Lens", "2. non-preset EFL falls back to generic name");
+check(convex.label === "Convex Lens B" && concave.label === "Concave Lens B",
+      "2. lens labels derived from preset EFL (B = 200 mm)");
+check(api.lensLabel(-100) === "Concave Lens A" && api.lensLabel(200) === "Convex Lens B" &&
+      api.lensLabel(400) === "Convex Lens C" && api.lensLabel(-400) === "Concave Lens C" &&
+      api.lensLabel(100) === "Convex Lens A",
+      "2. lensLabel mapping: 100→A, 200→B, 400→C for both types");
+check(api.lensLabel(150) === "Convex Lens" && api.lensLabel(-150) === "Concave Lens",
+      "2. non-preset EFL falls back to generic type name");
 check(convex.radius === C.solveLensRadius(200, 8, 50) && concave.radius === C.solveLensRadius(-200, 8, 50),
       "2. lens radii from shared solver");
 check(convex.outline.length === 98 && concave.surfaces.length === 4, "2. lens geometry built via core");
@@ -225,8 +299,8 @@ function outlineRound(comp, label) {
 
 // 5. props panel title shows the variant label
 api.selectComp(concave);
-check(elements["props-title"].textContent === "CC lens (mid)",
-      "5. props title shows 'CC lens (mid)' after selection");
+check(elements["props-title"].textContent === "Concave Lens B",
+      "5. props title shows 'Concave Lens B' after selection");
 api.selectComp(prism90);
 check(elements["props-title"].textContent === "Prism-90", "5. props title shows 'Prism-90'");
 
@@ -263,7 +337,7 @@ check(api.app.components.length === nBefore + 1 && !!dup && dup.label === "Prism
 api.selectComp(convex);
 globalThis.duplicateSelected();
 var dupL = api.app.components.find(function (c) { return c.type === "convex" && c.id !== convex.id; });
-check(!!dupL && dupL.label === "CV lens (mid)" && dupL.efl === 200 && dupL.radius === convex.radius,
+check(!!dupL && dupL.label === "Convex Lens B" && dupL.efl === 200 && dupL.radius === convex.radius,
       "7. duplicating a lens preserves label/EFL/geometry");
 api.selectComp(dupL);
 globalThis.deleteSelected();

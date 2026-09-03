@@ -18,7 +18,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .tbtn.power.off{color:#f44;border-color:#f44}
 .tbtn.radio{padding:3px 7px}
 .tbtn.radio.active{background:#505020;border-color:var(--accent);color:var(--accent)}
-.tbtn svg{width:16px;height:16px;fill:currentColor;flex-shrink:0}
+.tbtn svg{width:19px;height:19px;fill:currentColor;flex-shrink:0}
+.tbtn svg path,.tbtn svg rect{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
 #workspace{flex:1;position:relative;overflow:hidden}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
 #props{position:absolute;top:8px;right:8px;width:220px;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:10px;display:none;z-index:5}
@@ -41,6 +42,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
 @media(max-width:768px){
   #toolbar{gap:2px;padding:4px 6px}
   .tbtn{padding:3px 5px;font-size:10px}
+  .tbtn svg{width:15px;height:15px}
   #props{width:180px;right:4px;top:4px}
 }
 </style>
@@ -49,22 +51,23 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
 <div id="app">
   <header id="toolbar">
     <button class="tbtn power" id="btn-power" title="Toggle ray box on/off">⚡ Power</button>
+    <button class="tbtn" id="btn-white" title="Toggle white-light dispersion mode">☀ White</button>
     <button class="tbtn radio active" id="btn-slit-none" title="No slit – continuous beam">○ None</button>
     <button class="tbtn radio" id="btn-slit-single" title="Single-slit – one ray">│ Single</button>
     <button class="tbtn radio" id="btn-slit-triple" title="Triple-slit – three rays">┃┃┃ Triple</button>
     <div class="sep"></div>
-    <button class="tbtn" id="btn-convex100" aria-label="CV lens, thick" title="Convex lens, strongest curvature">CV lens (thick)</button>
-    <button class="tbtn" id="btn-convex200" aria-label="CV lens, mid" title="Convex lens, medium curvature">CV lens (mid)</button>
-    <button class="tbtn" id="btn-convex400" aria-label="CV lens, thin" title="Convex lens, gentlest curvature">CV lens (thin)</button>
+    <button class="tbtn" id="btn-convex100" aria-label="Convex lens A" title="Add a convex lens (variant A)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 1.5A6.8 6.8 0 0 1 8 14.5A6.8 6.8 0 0 1 8 1.5Z"/></svg>Convex Lens A</button>
+    <button class="tbtn" id="btn-convex200" aria-label="Convex lens B" title="Add a convex lens (variant B)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 1.5A9 9 0 0 1 8 14.5A9 9 0 0 1 8 1.5Z"/></svg>Convex Lens B</button>
+    <button class="tbtn" id="btn-convex400" aria-label="Convex lens C" title="Add a convex lens (variant C)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 1.5A16 16 0 0 1 8 14.5A16 16 0 0 1 8 1.5Z"/></svg>Convex Lens C</button>
     <div class="sep"></div>
-    <button class="tbtn" id="btn-concave100" aria-label="CC lens, thick" title="Concave lens, strongest curvature">CC lens (thick)</button>
-    <button class="tbtn" id="btn-concave200" aria-label="CC lens, mid" title="Concave lens, medium curvature">CC lens (mid)</button>
-    <button class="tbtn" id="btn-concave400" aria-label="CC lens, thin" title="Concave lens, gentlest curvature">CC lens (thin)</button>
+    <button class="tbtn" id="btn-concave100" aria-label="Concave lens A" title="Add a concave lens (variant A)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4.5 1.5H11.5A10 10 0 0 0 11.5 14.5H4.5A10 10 0 0 0 4.5 1.5Z"/></svg>Concave Lens A</button>
+    <button class="tbtn" id="btn-concave200" aria-label="Concave lens B" title="Add a concave lens (variant B)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4.5 1.5H11.5A16 16 0 0 0 11.5 14.5H4.5A16 16 0 0 0 4.5 1.5Z"/></svg>Concave Lens B</button>
+    <button class="tbtn" id="btn-concave400" aria-label="Concave lens C" title="Add a concave lens (variant C)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4.5 1.5H11.5A30 30 0 0 0 11.5 14.5H4.5A30 30 0 0 0 4.5 1.5Z"/></svg>Concave Lens C</button>
     <div class="sep"></div>
-    <button class="tbtn" id="btn-flat" title="Flat glass block 120×60mm">Block</button>
-    <button class="tbtn" id="btn-prism60" aria-label="Prism 60, equilateral" title="Equilateral prism (60°–60°–60°)">Prism-60</button>
-    <button class="tbtn" id="btn-prism90" aria-label="Prism 90, right-angle" title="Right-isosceles prism (45°–45°–90°)">Prism-90</button>
-    <button class="tbtn" id="btn-semi" title="Semicircular glass block">Semi</button>
+    <button class="tbtn" id="btn-flat" aria-label="Flat glass block" title="Flat glass block 120×60mm"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="2" y="4.5" width="12" height="7" rx="0.6"/></svg>Block</button>
+    <button class="tbtn" id="btn-prism60" aria-label="Prism 60, equilateral" title="Equilateral prism (60°–60°–60°)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2L14.75 13.7H1.25Z"/></svg>Prism-60</button>
+    <button class="tbtn" id="btn-prism90" aria-label="Prism 90, right-angle" title="Right-isosceles prism (45°–45°–90°)"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 4.85L14.75 11.6H1.25Z"/></svg>Prism-90</button>
+    <button class="tbtn" id="btn-semi" aria-label="Semicircular glass block" title="Semicircular glass block"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M1.5 5H14.5A6.5 6.5 0 0 1 1.5 5Z"/></svg>Semi</button>
     <div class="sep"></div>
     <button class="tbtn" id="btn-delete" title="Delete selected component">🗑 Del</button>
     <button class="tbtn" id="btn-clear" title="Clear all placed components">Clear</button>
@@ -73,7 +76,6 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
     <button class="tbtn" id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
     <button class="tbtn" id="btn-redo" title="Redo (Ctrl+Y)">↪ Redo</button>
     <div class="sep"></div>
-    <button class="tbtn" id="btn-white" title="Toggle white-light dispersion mode">☀ White</button>
     <button class="tbtn" id="btn-help" title="Show help overlay">? Help</button>
   </header>
   <main id="workspace">
@@ -96,7 +98,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
     <h3>Placing Components</h3>
     <ul>
       <li>Click a component button in the toolbar to place it at the bench center.</li>
-      <li>Lenses: <b>CV</b> = convex, <b>CC</b> = concave; <i>thick / mid / thin</i> describe the visible curvature (strongest to gentlest). The exact focal length is shown in the properties panel.</li>
+      <li>Lenses: <b>Convex Lens</b> and <b>Concave Lens</b>, each in three variants (A, B, C). Which variant bends light most is part of the investigation — trace a beam through each one, or check the focal length in the properties panel.</li>
       <li>Prisms: <b>Prism-60</b> (equilateral, 60°–60°–60°) and <b>Prism-90</b> (right-isosceles, 45°–45°–90°, right angle at the top).</li>
       <li>Drag the component body to move it.</li>
       <li>Drag the rotation handle (circle above the component) to rotate it.</li>
@@ -238,11 +240,12 @@ class RayBox extends Component {
   }
 }
 
-/** Descriptive variant name for the standard toolbar presets (100/200/400 mm). */
+/** Inquiry-based variant naming: A/B/C per lens type (±100/±200/±400 mm).
+ *  Labels intentionally reveal neither focal length nor curvature strength. */
 function lensLabel(efl) {
-  const kind = efl > 0 ? 'CV' : 'CC';
-  const strength = { 100: 'thick', 200: 'mid', 400: 'thin' }[Math.abs(efl)];
-  return strength ? `${kind} lens (${strength})` : (efl > 0 ? 'Convex Lens' : 'Concave Lens');
+  const kind = efl > 0 ? 'Convex Lens' : 'Concave Lens';
+  const variant = { 100: 'A', 200: 'B', 400: 'C' }[Math.abs(efl)];
+  return variant ? kind + ' ' + variant : kind;
 }
 
 class ConvexLens extends Component {
