@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Production Optics Tests (shared optics-core.js)</title>
+<style>
+body { font: 14px monospace; background: #111; color: #eee; padding: 20px; }
+.pass { color: #4f4; }
+.fail { color: #f44; }
+h2 { margin-top: 1em; border-bottom: 1px solid #444; padding-bottom: 4px; }
+</style>
+</head>
+<body>
+<h1>Production Optics Tests</h1>
+<p>These assertions run against the SAME <code>optics-core.js</code> that
+<code>index.html</code> loads. There are no re-implementations here.</p>
+<div id="output"></div>
+<script src="optics-core.js"></script>
+<script>
+/*__TESTS_START__*/
+function runOpticsCoreTests(ctx) {
+  var C = ctx.OpticsCore, check = ctx.check, log = ctx.log, approx = ctx.approx;
+  var THICKNESS = 8, APERTURE = 50, HALF_AP = APERTURE / 2;
+  var i, pi, p, g;
+  var PRESETS = [
+    { kind: 'convex',  efl: 100 },
+    { kind: 'convex',  efl: 200 },
+    { kind: 'convex',  efl: 400 },
+    { kind: 'concave', efl: -100 },
+    { kind: 'concave', efl: -200 },
+    { kind: 'concave', efl: -400 }
+  ];
+
+  function geomFor(kind, efl) {
+    return kind === 'convex'
+      ? C.buildConvexGeometry(efl, { thickness: THICKNESS, aperture: APERTURE })
+      : C.buildConcaveGeometry(efl, { thickness: THICKNESS, aperture: APERTURE });
+  }
+
+  // Medium-aware tracer over shared surfaces (test scaffolding only; it
+  // calls the production ArcSurface/LineSurface/refractRay from core).
+  // Returns final pos/direction plus the count of valid refraction events.
+  function traceThrough(pos, d, surfaces) {
+    var medium = 'air', hits = 0;
+    for (var step = 0; step < 20; step++) {
+      var best = null, bestT = Infinity;
+      for (var k = 0; k < surfaces.length; k++) {
+        var h = surfaces[k].intersect(pos, d);
+        if (h && h.t > 1e-6 && h.t < bestT) { bestT = h.t; best = h; }
+      }
+      if (!best) break;
+      var alignment = d.dot(best.normal);
+      var entering = alignment < -1e-6;
+      var exiting = alignment > 1e-6;
+      if ((entering && medium !== 'air') || (exiting && medium !== 'glass') || (!entering && !exiting)) {
+        pos = best.point.add(d.mul(1e-6)); continue;
+      }
+      var nrm = entering ? best.normal : best.normal.mul(-1);
+      var refr = C.refractRay(d, nrm, entering ? 1.0 : 1.5, entering ? 1.5 : 1.0);
+      if (refr === null) { d = C.reflect(d, nrm); pos = best.point.add(d.mul(1e-6)); continue; }
+      d = refr;
+      hits++;
+      medium = entering ? 'glass' : 'air';
+      pos = best.point.add(d.mul(1e-6));
+    }
+    return { pos: pos, d: d, hits: hits };
+  }
+
+  // ─── 1. Solver: closed form, converges, tiny residual ─────
+  log('<h2>1. Radius solver per preset (closed form)</h2>');
+  for (pi = 0; pi < PRESETS.length; pi++) {
+    p = PRESETS[pi];
+    var sign = p.efl > 0 ? 1 : -1;
+    var R = C.solveLensRadius(p.efl, THICKNESS, APERTURE);
+    check(R !== null, 'efl=' + p.efl + ': solver returns R');
+    check(R !== null && Number.isFinite(R) && R >= HALF_AP,
+          'efl=' + p.efl + ': R finite and >= halfAp' + (R !== null ? ' (R=' + R.toFixed(4) + ' mm)' : ''));
+    var target = sign / Math.abs(p.efl);
+    var rel = R === null ? NaN : Math.abs(C.lensPower(R, 1.5, THICKNESS, sign) - target) / Math.abs(target);
+    check(rel < C.SOLVER_REL_TOL, 'efl=' + p.efl + ': power residual ' + rel.toExponential(2) + ' < ' + C.SOLVER_REL_TOL);
+    log('    efl=' + p.efl + '  R=' + (R === null ? 'null' : R.toFixed(4)) + ' mm  rel-residual=' + rel.toExponential(2));
+  }
+
+  // ─── 2. Solver failure → null (no aperture/2 substitution) ─
+  log('<h2>2. Solver failure returns null, never a substituted radius</h2>');
+  var badInputs = [NaN, Infinity, -Infinity, 0, 10, 20, 1, -10];
+  for (i = 0; i < badInputs.length; i++) {
+    var Rs = C.solveLensRadius(badInputs[i], THICKNESS, APERTURE);
+    check(Rs === null, 'efl=' + badInputs[i] + ': null (got ' + Rs + ')');
+  }
+  check(C.solveLensRadius(200, 0, APERTURE) === null, 'thickness=0: null');
+  check(C.solveLensRadius(200, THICKNESS, 0) === null, 'aperture=0: null');
+  check(C.solveLensRadius(200, THICKNESS, APERTURE, 1.0) === null, 'n=1 (no refraction): null');
+  // Convex f=50: R=48.65, but the per-face sagitta (6.9 mm) exceeds half the
+  // center thickness (4 mm) — the faces would cross — so it must be refused.
+  check(C.buildConvexGeometry(50) === null, 'convex f=50 rejected (edges would cross)');
+  check(C.buildConcaveGeometry(-50) !== null, 'concave f=-50 accepted (edges thicker than center)');
+  check(C.buildConcaveGeometry(-20) === null, 'concave f=-20 rejected (R < halfAp)');
+  check(C.buildConvexGeometry(-100) === null, 'negative EFL rejected by convex builder');
+  check(C.buildConcaveGeometry(100) === null, 'positive EFL rejected by concave builder');
+
+  // ─── 3. Builders produce fully-valid geometry ───────────────
+  log('<h2>3. Geometry builders: finite, validated, correct surface count</h2>');
+  for (pi = 0; pi < PRESETS.length; pi++) {
+    p = PRESETS[pi];
+    g = geomFor(p.kind, p.efl);
+    check(g !== null, p.kind + ' ' + p.efl + ': builder returns geometry');
+    if (!g) continue;
+    check(g.outline.length === 98, p.kind + ' ' + p.efl + ': outline has 98 points (2×(48+1))');
+    check(g.outline.every(function (pt) { return Number.isFinite(pt.x) && Number.isFinite(pt.y); }),
+          p.kind + ' ' + p.efl + ': all outline coords finite');
+    check(g.surfaces.length === (p.kind === 'convex' ? 2 : 4),
+          p.kind + ' ' + p.efl + ': ' + (p.kind === 'convex' ? '2 arc surfaces' : '2 arcs + 2 rim faces'));
+    var ys = g.outline.map(function (pt) { return pt.y; });
+    check(approx(Math.max.apply(null, ys) - Math.min.apply(null, ys), APERTURE, 0.01),
+          p.kind + ' ' + p.efl + ': outline height = aperture');
+    check(C.validateLensGeometry(g, { sign: p.efl > 0 ? 1 : -1, thickness: THICKNESS, aperture: APERTURE }),
+          p.kind + ' ' + p.efl + ': validateLensGeometry accepts');
+  }
+
+  // ─── 4. validateLensGeometry rejects corrupted geometry ────
+  log('<h2>4. Validator rejects corrupted candidates (and does not mutate)</h2>');
+  var good = C.buildConcaveGeometry(-200, { thickness: THICKNESS, aperture: APERTURE });
+  var pristine = C.cloneLensGeometry(good);
+  var corrupt;
+  corrupt = C.cloneLensGeometry(good); corrupt.outline[10] = new C.Vec2(NaN, 5);
+  check(C.validateLensGeometry(corrupt, { sign: -1, thickness: THICKNESS, aperture: APERTURE }) === false,
+        'non-finite outline point rejected');
+  corrupt = C.cloneLensGeometry(good); corrupt.radius = 30;
+  check(C.validateLensGeometry(corrupt, { sign: -1, thickness: THICKNESS, aperture: APERTURE }) === false,
+        'radius inconsistent with EFL rejected');
+  corrupt = C.cloneLensGeometry(good);
+  corrupt.surfaces[0] = new C.ArcSurface(new C.Vec2(0, 0), 1, 0, 0.1, -1, 1.5);
+  check(C.validateLensGeometry(corrupt, { sign: -1, thickness: THICKNESS, aperture: APERTURE }) === false,
+        'undersized surface radius rejected');
+  corrupt = C.cloneLensGeometry(good); corrupt.surfaces[1].center = new C.Vec2(Infinity, 0);
+  check(C.validateLensGeometry(corrupt, { sign: -1, thickness: THICKNESS, aperture: APERTURE }) === false,
+        'non-finite surface center rejected');
+  corrupt = C.cloneLensGeometry(good); corrupt.efl = -50;
+  check(C.validateLensGeometry(corrupt, { sign: -1, thickness: THICKNESS, aperture: APERTURE }) === false,
+        'stale efl (wrong power) rejected');
+  check(C.validateLensGeometry(good, { sign: 1, thickness: THICKNESS, aperture: APERTURE }) === false,
+        'concave geometry rejected under convex sign');
+  check(good.outline[10].x === pristine.outline[10].x &&
+        good.outline[10].y === pristine.outline[10].y &&
+        good.radius === pristine.radius,
+        'validation did not mutate the candidate');
+
+  // ─── 5. Undo/redo round-trips (production snapshot protocol) ─
+  log('<h2>5. Atomic undo/redo via cloneLensGeometry snapshots</h2>');
+  function geomEquals(a, b) {
+    if (!a || !b || a.efl !== b.efl || a.radius !== b.radius) return false;
+    if (a.outline.length !== b.outline.length || a.surfaces.length !== b.surfaces.length) return false;
+    for (var m = 0; m < a.outline.length; m++) {
+      if (a.outline[m].x !== b.outline[m].x || a.outline[m].y !== b.outline[m].y) return false;
+    }
+    for (m = 0; m < a.surfaces.length; m++) {
+      if (a.surfaces[m].radius !== b.surfaces[m].radius) return false;
+      var ca = a.surfaces[m].center, cb = b.surfaces[m].center;
+      if (ca && cb && (ca.x !== cb.x || ca.y !== cb.y)) return false;
+    }
+    return true;
+  }
+  // Mirrors the setEFL/PropertyCommand protocol: candidate built by the pure
+  // builder (no component mutation), old state deep-cloned before pushing,
+  // apply = cloneLensGeometry (what lens.applyGeometry does).
+  for (pi = 0; pi < 2; pi++) {
+    var kind = pi === 0 ? 'concave' : 'convex';
+    var e1 = pi === 0 ? -200 : 200, e2 = pi === 0 ? -100 : 100;
+    var g1 = geomFor(kind, e1), g2 = geomFor(kind, e2);
+    check(g1 && g2, kind + ': both preset geometries build');
+    var current = C.cloneLensGeometry(g1);        // lens created at e1
+    var oldSnap = C.cloneLensGeometry(current);   // setEFL: snapshot BEFORE change
+    var newSnap = g2;                             // candidate already validated
+    var historyLen = 1;
+    current = C.cloneLensGeometry(newSnap);       // execute()
+    historyLen++;
+    check(geomEquals(current, g2), kind + ': after edit, full ' + e2 + ' mm geometry');
+    var bad = geomFor(kind, pi === 0 ? -10 : 10);
+    check(bad === null, kind + ': invalid EFL attempt builds nothing');
+    check(geomEquals(current, g2), kind + ': invalid attempt leaves state untouched');
+    current = C.cloneLensGeometry(oldSnap);       // undo()
+    check(geomEquals(current, g1), kind + ': undo restores complete ' + e1 + ' mm geometry');
+    current = C.cloneLensGeometry(newSnap);       // redo()
+    check(geomEquals(current, g2), kind + ': redo restores complete ' + e2 + ' mm geometry');
+    check(current !== g2 && current.outline[0] !== g2.outline[0],
+          kind + ': applied state does not alias snapshot arrays');
+  }
+
+  // ─── 6. Selection outline: world AABB at 0/30/45/90/135° ──
+  log('<h2>6. Selection outline (world AABB → screen, no double transform)</h2>');
+  // Mirrors drawSelectionOutline(): maps the two world-AABB corners through
+  // worldToScreen WITHOUT applying the component transform again.
+  function outlineRectScreen(bounds, view) {
+    var tl = view.worldToScreen(new C.Vec2(bounds.min.x, bounds.max.y));
+    var br = view.worldToScreen(new C.Vec2(bounds.max.x, bounds.min.y));
+    return { x0: Math.min(tl.x, br.x), x1: Math.max(tl.x, br.x),
+             y0: Math.min(tl.y, br.y), y1: Math.max(tl.y, br.y) };
+  }
+  var view = {
+    cameraPos: { x: 100, y: -20 }, zoom: 2.345, screenW: 913, screenH: 547,
+    worldToScreen: function (v) {
+      return new C.Vec2((v.x - this.cameraPos.x) * this.zoom + this.screenW / 2,
+                       -(v.y - this.cameraPos.y) * this.zoom + this.screenH / 2);
+    }
+  };
+  var pos = new C.Vec2(75, -30);
+  var semiPts = [];
+  for (i = 0; i <= 24; i++) { var a = Math.PI + Math.PI * i / 24; semiPts.push(new C.Vec2(Math.cos(a) * 80, Math.sin(a) * 80)); }
+  var shapes = {
+    convex:  geomFor('convex', 200).outline,
+    concave: geomFor('concave', -200).outline,
+    block: [new C.Vec2(-60, -30), new C.Vec2(60, -30), new C.Vec2(60, 30), new C.Vec2(-60, 30)],
+    prism: [new C.Vec2(-40, -40), new C.Vec2(40, -40), new C.Vec2(0, 40)],
+    semicircle: semiPts
+  };
+  var shapeNames = Object.keys(shapes);
+  var angles = [0, 30, 45, 90, 135];
+  for (pi = 0; pi < shapeNames.length; pi++) {
+    var name = shapeNames[pi];
+    for (i = 0; i < angles.length; i++) {
+      var rad = angles[i] * Math.PI / 180;
+      (function (rot) {
+        var worldPts = shapes[name].map(function (pt) { return C.transformPoint(pt, pos, rot); });
+        var bounds = C.aabbOfPoints(worldPts, 5);
+        var rect = outlineRectScreen(bounds, view);
+        var screenPts = worldPts.map(function (pt) { return view.worldToScreen(pt); });
+        var inside = screenPts.every(function (s) {
+          return s.x >= rect.x0 - 1e-9 && s.x <= rect.x1 + 1e-9 &&
+                 s.y >= rect.y0 - 1e-9 && s.y <= rect.y1 + 1e-9;
+        });
+        check(inside, name + ' @ ' + angles[i] + '\u00b0: selection rect contains every point');
+        var padOk = rect.x1 - rect.x0 >= (Math.max.apply(null, screenPts.map(function (s) { return s.x; })) -
+                    Math.min.apply(null, screenPts.map(function (s) { return s.x; })));
+        check(padOk, name + ' @ ' + angles[i] + '\u00b0: rect no smaller than point span');
+      })(rad);
+    }
+  }
+
+  // ─── 7. Optics regression: convergence/divergence + focal ──
+  log('<h2>7. Parallel-ray convergence/divergence for all presets</h2>');
+  for (pi = 0; pi < PRESETS.length; pi++) {
+    p = PRESETS[pi];
+    g = geomFor(p.kind, p.efl);
+    var arcs = g.surfaces.filter(function (s) { return s instanceof C.ArcSurface; });
+    var r = traceThrough(new C.Vec2(-400, 10), new C.Vec2(1, 0), arcs);
+    check(r.hits === 2, p.kind + ' ' + p.efl + ': ray crosses both optical surfaces (hits=' + r.hits + ')');
+    var focalX = r.pos.x - r.d.x * (r.pos.y / r.d.y);
+    if (p.kind === 'convex') {
+      check(r.d.y < -0.001, 'convex ' + p.efl + ': +Y ray converges (dy=' + r.d.y.toFixed(4) + ')');
+      check(approx(focalX, p.efl, p.efl * 0.05),
+            'convex ' + p.efl + ': focal x=' + focalX.toFixed(1) + ' \u2248 ' + p.efl + ' mm (\u00b15%)');
+    } else {
+      check(r.d.y > 0.001, 'concave ' + p.efl + ': +Y ray diverges (dy=' + r.d.y.toFixed(4) + ')');
+      check(approx(focalX, p.efl, Math.abs(p.efl) * 0.05),
+            'concave ' + p.efl + ': virtual focal x=' + focalX.toFixed(1) + ' \u2248 ' + p.efl + ' mm (\u00b15%)');
+    }
+    log('    ' + p.kind + ' ' + p.efl + ': dy=' + r.d.y.toFixed(5) + '  measured focal x=' + focalX.toFixed(1) + ' mm');
+  }
+
+  // ─── 8. Other components ───────────────────────────────────
+  log('<h2>8. Blocks, prism, semicircle regressions</h2>');
+  // Tilted flat block: lateral shift, output parallel to input.
+  var blockVerts = [new C.Vec2(-60, -30), new C.Vec2(60, -30), new C.Vec2(60, 30), new C.Vec2(-60, 30)];
+  var bRot = 30 * Math.PI / 180;
+  var worldBlockSurf = [];
+  for (i = 0; i < 4; i++) {
+    var va = blockVerts[i], vb = blockVerts[(i + 1) % 4];
+    worldBlockSurf.push(new C.LineSurface(
+      C.transformPoint(va, new C.Vec2(0, 0), bRot),
+      C.transformPoint(vb, new C.Vec2(0, 0), bRot), 1.5, 1));
+  }
+  var bRes = traceThrough(new C.Vec2(-200, 15), new C.Vec2(1, 0), worldBlockSurf);
+  check(bRes.hits === 2, 'tilted block: two refractions (entry + exit), hits=' + bRes.hits);
+  check(Math.abs(bRes.d.y) < 1e-9, 'tilted block: output parallel to input (dy=' + bRes.d.y.toExponential(2) + ')');
+  check(Math.abs(bRes.pos.y - 15) > 0.5, 'tilted block: lateral displacement = ' + (bRes.pos.y - 15).toFixed(2) + ' mm');
+
+  // Prism (faces wound v0→v1→v2 CCW): bottom(0), right(1), left(2).
+  var pHalf = 40, halfBase = pHalf * Math.tan(30 * Math.PI / 180);
+  var prismVerts = [new C.Vec2(-halfBase, -pHalf), new C.Vec2(halfBase, -pHalf), new C.Vec2(0, pHalf)];
+  var prismSurf = [];
+  for (i = 0; i < 3; i++) {
+    prismSurf.push(new C.LineSurface(prismVerts[i], prismVerts[(i + 1) % 3], 1.5, 1));
+  }
+  var pFull = traceThrough(new C.Vec2(-200, -10), new C.Vec2(1, 0), prismSurf);
+  check(pFull.hits === 2, 'prism: two refractions (entry + exit), hits=' + pFull.hits);
+  check(pFull.d.angle() !== 0, 'prism: net deviation (exit angle=' + (pFull.d.angle() * 180 / Math.PI).toFixed(2) + '\u00b0)');
+  // Each face, hit from outside, refracts on its own:
+  var pEntry = traceThrough(new C.Vec2(-200, -10), new C.Vec2(1, 0), [prismSurf[2]]);
+  check(pEntry.hits === 1 && pEntry.d.angle() !== 0, 'prism: left face bends an entering ray');
+  var pExit = traceThrough(new C.Vec2(200, -10), new C.Vec2(-1, 0), [prismSurf[1]]);
+  check(pExit.hits === 1 && pExit.d.angle() !== 0, 'prism: right face bends a ray entering from its side');
+
+  // Semicircular block: a radial ray meets the curved face at normal
+  // incidence (no bending there) and refracts at the flat face.
+  var semArc = new C.ArcSurface(new C.Vec2(0, 0), 80, Math.PI, 2 * Math.PI, 1, 1.5);
+  var semFlat = new C.LineSurface(new C.Vec2(-80, 0), new C.Vec2(80, 0), 1.5, -1);
+  var inDir = C.Vec2.fromAngle(250 * Math.PI / 180).mul(-1);           // toward center from lower-left
+  var inOrigin = inDir.mul(-300);                                      // 300 mm out along the radius
+  var arcHit = semArc.intersect(inOrigin, inDir);
+  check(arcHit !== null, 'semicircle: radial ray hits the curved face');
+  if (arcHit) {
+    var noBend = C.refractRay(inDir, arcHit.normal, 1.0, 1.5);
+    check(noBend !== null && Math.abs(noBend.angle() - inDir.angle()) < 1e-12,
+          'semicircle: curved face crossed at normal incidence (no bend)');
+  }
+  var sRes = traceThrough(inOrigin, inDir, [semArc, semFlat]);
+  check(Math.abs(sRes.d.angle() - inDir.angle()) > 1e-6,
+        'semicircle: ray bent at flat-face exit (angle ' + (inDir.angle() * 180 / Math.PI).toFixed(1) +
+        '\u00b0 \u2192 ' + (sRes.d.angle() * 180 / Math.PI).toFixed(1) + '\u00b0)');
+
+  // ─── 9. Selection (hit-test) on lens bodies ────────────────
+  log('<h2>9. Point-in-polygon selection for both lens types</h2>');
+  for (pi = 0; pi < PRESETS.length; pi++) {
+    p = PRESETS[pi];
+    g = geomFor(p.kind, p.efl);
+    var maxX = Math.max.apply(null, g.outline.map(function (pt) { return Math.abs(pt.x); }));
+    check(C.ptInPolygon(new C.Vec2(0, 0), g.outline), p.kind + ' ' + p.efl + ': center selected');
+    check(C.ptInPolygon(new C.Vec2(0, HALF_AP - 2), g.outline), p.kind + ' ' + p.efl + ': near-aperture point selected');
+    check(!C.ptInPolygon(new C.Vec2(0, HALF_AP + 10), g.outline), p.kind + ' ' + p.efl + ': above aperture not selected');
+    check(!C.ptInPolygon(new C.Vec2(maxX + 5, 0), g.outline), p.kind + ' ' + p.efl + ': far right not selected');
+    check(!C.ptInPolygon(new C.Vec2(-maxX - 5, 0), g.outline), p.kind + ' ' + p.efl + ': far left not selected');
+  }
+
+  // ─── 10. Angle / sweep utilities ───────────────────────────
+  log('<h2>10. normalizeAngle / angleInSweep edge cases</h2>');
+  check(approx(C.normalizeAngle(-Math.PI / 2), 3 * Math.PI / 2, 1e-12), 'normalizeAngle(-90\u00b0) = 270\u00b0');
+  check(approx(C.normalizeAngle(2 * Math.PI + 0.5), 0.5, 1e-12), 'normalizeAngle wraps 2\u03c0');
+  check(C.angleInSweep(0.1, -0.2, 0.2), 'sweep contains in-range angle');
+  check(!C.angleInSweep(0.5, -0.2, 0.2), 'sweep excludes out-of-range angle');
+  check(C.angleInSweep(Math.PI + 0.05, Math.PI - 0.1, Math.PI + 0.1), 'upper-half arc sweep');
+  check(C.angleInSweep(6.2, 6.0, 0.2), 'sweep crossing the 0/2\u03c0 boundary');
+  check(!C.angleInSweep(3.1, 6.0, 0.2), 'opposite side rejected in wrap-around sweep');
+
+  // ─── 11. Dispersion helpers ────────────────────────────────
+  log('<h2>11. Cauchy dispersion + spectral colors</h2>');
+  check(C.cauchyN(400) > C.cauchyN(700), 'cauchyN decreases with wavelength');
+  check(approx(C.cauchyN(550), 1.5, 0.02), 'cauchyN(550) \u2248 design index 1.5');
+  var blue = C.wavelengthToRGB(450), red = C.wavelengthToRGB(650);
+  check(blue.b > blue.r && red.r > red.b, 'wavelengthToRGB: 450nm reads blue, 650nm reads red');
+}
+/*__TESTS_END__*/
+
+(function () {
+  var passed = 0, failed = 0;
+  var out = document.getElementById('output');
+  function log(msg, cls) {
+    if (typeof msg === 'string' && msg.indexOf('<h2>') === 0) {
+      var h = document.createElement('h2');
+      h.innerHTML = msg.replace(/<\/?h2>/g, '');
+      out.appendChild(h);
+      return;
+    }
+    var d = document.createElement('div');
+    d.className = cls || '';
+    d.textContent = msg;
+    out.appendChild(d);
+  }
+  function check(cond, msg) {
+    if (cond) { passed++; log('PASS: ' + msg, 'pass'); }
+    else { failed++; log('FAIL: ' + msg, 'fail'); }
+  }
+  function approx(a, b, tol) { return Math.abs(a - b) < (tol || 0.5); }
+  runOpticsCoreTests({ OpticsCore: window.OpticsCore, check: check, log: log, approx: approx });
+  log('<h2>Results: ' + passed + ' passed, ' + failed + ' failed</h2>');
+  document.title = (failed ? failed + ' FAILED' : 'ALL PASS') + ' — Production Optics Tests';
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Raybox Bench – Optics Simulation</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#000;--panel:#181818;--panel-border:#333;--text:#e0e0e0;--accent:#ffd700;--btn-bg:#2a2a2a;--btn-hover:#3a3a3a;--btn-active:#505020;--danger:#c33;--glass:rgba(160,190,230,0.18);--glass-stroke:rgba(200,220,255,0.4)}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:12px/1.4 system-ui,sans-serif}
+#app{display:flex;flex-direction:column;height:100vh;width:100vw}
+#toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--panel-border);min-height:44px;z-index:10}
+#toolbar .sep{width:1px;height:28px;background:var(--panel-border);flex-shrink:0}
+.tbtn{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--btn-bg);border:1px solid #444;border-radius:4px;color:var(--text);font:11px/1 system-ui,sans-serif;cursor:pointer;white-space:nowrap;transition:background .15s}
+.tbtn:hover{background:var(--btn-hover)}
+.tbtn.active{background:var(--btn-active);border-color:var(--accent);color:var(--accent)}
+.tbtn.power{color:#0f0;border-color:#0f0}
+.tbtn.power.off{color:#f44;border-color:#f44}
+.tbtn.radio{padding:3px 7px}
+.tbtn.radio.active{background:#505020;border-color:var(--accent);color:var(--accent)}
+.tbtn svg{width:16px;height:16px;fill:currentColor;flex-shrink:0}
+#workspace{flex:1;position:relative;overflow:hidden}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+#props{position:absolute;top:8px;right:8px;width:220px;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:10px;display:none;z-index:5}
+#props h3{font-size:12px;margin-bottom:6px;color:var(--accent)}
+#props label{display:flex;justify-content:space-between;align-items:center;margin:4px 0;font-size:11px}
+#props input[type=number]{width:70px;background:#111;border:1px solid #444;color:var(--text);padding:2px 4px;border-radius:3px;font-size:11px}
+#props button{padding:3px 8px;background:var(--btn-bg);border:1px solid #555;border-radius:3px;color:var(--text);cursor:pointer;font-size:11px}
+#props button:hover{background:var(--btn-hover)}
+#props button.del{color:var(--danger);border-color:var(--danger)}
+#help-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
+#help-overlay.show{opacity:1;pointer-events:all}
+#help-box{background:var(--panel);border:1px solid var(--panel-border);border-radius:8px;padding:24px;max-width:500px;max-height:80vh;overflow-y:auto;color:var(--text);line-height:1.6}
+#help-box h2{color:var(--accent);margin-bottom:12px;font-size:16px}
+#help-box h3{color:var(--accent);margin:12px 0 4px;font-size:13px}
+#help-box ul{padding-left:20px}
+#help-box li{margin:2px 0;font-size:12px}
+#help-box button{margin-top:12px;padding:6px 16px;background:var(--btn-bg);border:1px solid var(--accent);border-radius:4px;color:var(--accent);cursor:pointer;font-size:12px}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--accent);border-radius:4px;padding:6px 14px;color:var(--accent);font-size:12px;z-index:50;opacity:0;transition:opacity .3s;pointer-events:none}
+#toast.show{opacity:1}
+@media(max-width:768px){
+  #toolbar{gap:2px;padding:4px 6px}
+  .tbtn{padding:3px 5px;font-size:10px}
+  #props{width:180px;right:4px;top:4px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="toolbar">
+    <button class="tbtn power" id="btn-power" title="Toggle ray box on/off">⚡ Power</button>
+    <button class="tbtn radio active" id="btn-slit-none" title="No slit – continuous beam">○ None</button>
+    <button class="tbtn radio" id="btn-slit-single" title="Single-slit – one ray">│ Single</button>
+    <button class="tbtn radio" id="btn-slit-triple" title="Triple-slit – three rays">┃┃┃ Triple</button>
+    <div class="sep"></div>
+    <button class="tbtn" id="btn-convex100" title="Convex lens f=100mm">Lens C 100</button>
+    <button class="tbtn" id="btn-convex200" title="Convex lens f=200mm">Lens C 200</button>
+    <button class="tbtn" id="btn-convex400" title="Convex lens f=400mm">Lens C 400</button>
+    <div class="sep"></div>
+    <button class="tbtn" id="btn-concave100" title="Concave lens f=−100mm">Lens V 100</button>
+    <button class="tbtn" id="btn-concave200" title="Concave lens f=−200mm">Lens V 200</button>
+    <button class="tbtn" id="btn-concave400" title="Concave lens f=−400mm">Lens V 400</button>
+    <div class="sep"></div>
+    <button class="tbtn" id="btn-flat" title="Flat glass block 120×60mm">Block</button>
+    <button class="tbtn" id="btn-prism" title="Triangular prism 60°">Prism</button>
+    <button class="tbtn" id="btn-semi" title="Semicircular glass block">Semi</button>
+    <div class="sep"></div>
+    <button class="tbtn" id="btn-delete" title="Delete selected component">🗑 Del</button>
+    <button class="tbtn" id="btn-clear" title="Clear all placed components">Clear</button>
+    <button class="tbtn" id="btn-reset" title="Reset experiment to startup state">Reset</button>
+    <div class="sep"></div>
+    <button class="tbtn" id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
+    <button class="tbtn" id="btn-redo" title="Redo (Ctrl+Y)">↪ Redo</button>
+    <div class="sep"></div>
+    <button class="tbtn" id="btn-white" title="Toggle white-light dispersion mode">☀ White</button>
+    <button class="tbtn" id="btn-help" title="Show help overlay">? Help</button>
+  </header>
+  <main id="workspace">
+    <canvas id="canvas"></canvas>
+    <div id="props">
+      <h3 id="props-title">Component</h3>
+      <div id="props-body"></div>
+    </div>
+  </main>
+</div>
+<div id="help-overlay">
+  <div id="help-box">
+    <h2>Raybox Bench – Help</h2>
+    <h3>Ray Box</h3>
+    <ul>
+      <li>Drag the ray box to move it; drag the rotation handle (circle) to rotate it.</li>
+      <li>Use the <b>Power</b> button to turn the beam on/off.</li>
+      <li>Use <b>None / Single / Triple</b> to switch slit attachments.</li>
+    </ul>
+    <h3>Placing Components</h3>
+    <ul>
+      <li>Click a component button in the toolbar to place it at the bench center.</li>
+      <li>Drag the component body to move it.</li>
+      <li>Drag the rotation handle (circle above the component) to rotate it.</li>
+      <li>Click to select; press <b>Delete</b> key or the <b>🗑 Del</b> button to remove.</li>
+    </ul>
+    <h3>Properties Panel</h3>
+    <ul>
+      <li>Shows position, rotation, focal length (lenses), or refractive index.</li>
+      <li>Lens focal length is editable — type a value and press Enter.</li>
+    </ul>
+    <h3>Keyboard Shortcuts</h3>
+    <ul>
+      <li><b>Ctrl+Z</b> – Undo</li>
+      <li><b>Ctrl+Y</b> – Redo</li>
+      <li><b>Delete / Backspace</b> – Delete selected</li>
+      <li><b>Escape</b> – Deselect</li>
+    </ul>
+    <button onclick="document.getElementById('help-overlay').classList.remove('show')">Got it</button>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="optics-core.js"></script>
+<script>
+"use strict";
+
+// ─────────────────────────────────────────────────────────────
+//  § 1. SHARED CORE (optics-core.js — also used by tests)
+// ─────────────────────────────────────────────────────────────
+
+const {
+  Vec2, EPSILON, deg2rad, rad2deg, clamp,
+  ptInConvex, ptInPolygon,
+  LineSurface, ArcSurface,
+  reflect, refractRay,
+  cauchyN, WAVELENGTHS, wavelengthToRGB,
+  buildConvexGeometry, buildConcaveGeometry, cloneLensGeometry
+} = window.OpticsCore;
+
+// ─────────────────────────────────────────────────────────────
+//  § 2. OPTICAL COMPONENTS
+// ─────────────────────────────────────────────────────────────
+
+let compIdCounter = 0;
+
+class Component {
+  constructor(type, pos, rot = 0) {
+    this.id = compIdCounter++;
+    this.type = type;
+    this.pos = pos.clone();
+    this.rot = rot;
+    this.selected = false;
+    this.surfaces = [];
+    this.apertures = [];
+  }
+  getTransform() { return { pos: this.pos, rot: this.rot }; }
+  localToWorld(p) { return p.rotate(this.rot).add(this.pos); }
+  worldToLocal(p) { return p.sub(this.pos).rotate(-this.rot); }
+  containsPoint(p) { return false; }
+  render(ctx, view) {}
+  getAABB() { return { min: this.pos.sub(new Vec2(50, 50)), max: this.pos.add(new Vec2(50, 50)) }; }
+  getRotHandlePos() {
+    return this.localToWorld(new Vec2(0, -55));
+  }
+}
+
+class RayBox extends Component {
+  constructor(pos, rot, cfg = {}) {
+    super('raybox', pos, rot);
+    this.power = cfg.power !== false;
+    this.slitAttachment = cfg.slitAttachment || 'none';
+    this.width = 60; this.height = 40;
+    this.apertureWidth = 30;
+  }
+  containsPoint(p) {
+    const lp = this.worldToLocal(p);
+    return lp.x >= -this.width / 2 && lp.x <= this.width / 2 &&
+           lp.y >= -this.height / 2 && lp.y <= this.height / 2;
+  }
+  getAABB() {
+    const hw = this.width / 2, hh = this.height / 2;
+    const corners = [new Vec2(-hw, -hh), new Vec2(hw, -hh), new Vec2(hw, hh), new Vec2(-hw, hh)];
+    const worldCorners = corners.map(c => this.localToWorld(c));
+    const xs = worldCorners.map(c => c.x), ys = worldCorners.map(c => c.y);
+    return { min: new Vec2(Math.min(...xs), Math.min(...ys)), max: new Vec2(Math.max(...xs), Math.max(...ys)) };
+  }
+  render(ctx, view) {
+    ctx.save();
+    beginComponentTransform(ctx, view, this);
+    const hw = this.width / 2, hh = this.height / 2;
+    ctx.fillStyle = '#222';
+    ctx.fillRect(-hw, -hh, hw * 2, hh * 2);
+    ctx.strokeStyle = this.power ? '#0f0' : '#666';
+    ctx.lineWidth = this.selected ? 2 / view.zoom : 1 / view.zoom;
+    ctx.strokeRect(-hw, -hh, hw * 2, hh * 2);
+    ctx.fillStyle = this.power ? '#0f0' : '#666';
+    ctx.font = `10px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(this.power ? 'ON' : 'OFF', 0, 0);
+    ctx.fillStyle = '#ffd700';
+    ctx.font = `8px system-ui`;
+    const slitLabel = this.slitAttachment === 'single' ? '│' : this.slitAttachment === 'triple' ? '┃┃┃' : '';
+    ctx.fillText(slitLabel, hw - 8, 0);
+    ctx.restore();
+    this.renderSlit(ctx, view);
+  }
+  renderSlit(ctx, view) {
+    if (this.slitAttachment === 'none') return;
+    ctx.save();
+    beginComponentTransform(ctx, view, this);
+    const hw = this.width / 2;
+    const plateW = 4, plateH = this.apertureWidth;
+    const x = hw + plateW / 2;
+    const sh = plateH / 2;
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x - plateW / 2, -sh, plateW, sh * 2);
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1 / view.zoom;
+    ctx.strokeRect(x - plateW / 2, -sh, plateW, sh * 2);
+    ctx.fillStyle = '#ffd700';
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = 1.5 / view.zoom;
+    if (this.slitAttachment === 'single') {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 1);
+      ctx.stroke();
+    } else if (this.slitAttachment === 'triple') {
+      const sp = 10;
+      for (const dy of [-sp, 0, sp]) {
+        ctx.beginPath();
+        ctx.moveTo(x, dy);
+        ctx.lineTo(x, dy + 1);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+}
+
+class ConvexLens extends Component {
+  constructor(pos, rot, efl = 200) {
+    super('convex', pos, rot);
+    this.efl = efl;
+    this.thickness = 8;
+    this.aperture = 50;
+    this.recalcSurfaces();
+  }
+  buildGeometryForEFL(candidateEFL) {
+    return buildConvexGeometry(candidateEFL, {
+      thickness: this.thickness, aperture: this.aperture
+    });
+  }
+  applyGeometry(geometry) {
+    const g = cloneLensGeometry(geometry);
+    this.efl = g.efl;
+    this.radius = g.radius;
+    this.outline = g.outline;
+    this.surfaces = g.surfaces;
+  }
+  snapshotGeometry() {
+    if (!this.outline || !this.surfaces) return null;
+    return cloneLensGeometry({
+      efl: this.efl, radius: this.radius, outline: this.outline, surfaces: this.surfaces
+    });
+  }
+  recalcSurfaces() {
+    const geom = this.buildGeometryForEFL(this.efl);
+    if (geom) { this.applyGeometry(geom); return true; }
+    return false;
+  }
+  containsPoint(p) {
+    const lp = this.worldToLocal(p);
+    if (this.outline) return ptInPolygon(lp, this.outline);
+    return lp.x >= -this.thickness / 2 - 2 && lp.x <= this.thickness / 2 + 2 &&
+           lp.y >= -this.aperture / 2 - 2 && lp.y <= this.aperture / 2 + 2;
+  }
+  getAABB() {
+    if (!this.outline?.length) {
+      const hw = this.aperture / 2 + 5;
+      const corners = [new Vec2(-hw, -hw), new Vec2(hw, -hw), new Vec2(hw, hw), new Vec2(-hw, hw)];
+      const wc = corners.map(c => this.localToWorld(c));
+      const xs = wc.map(c => c.x), ys = wc.map(c => c.y);
+      return { min: new Vec2(Math.min(...xs), Math.min(...ys)), max: new Vec2(Math.max(...xs), Math.max(...ys)) };
+    }
+    const worldPoints = this.outline.map(p => this.localToWorld(p));
+    const xs = worldPoints.map(p => p.x), ys = worldPoints.map(p => p.y);
+    const pad = 5;
+    return { min: new Vec2(Math.min(...xs) - pad, Math.min(...ys) - pad),
+             max: new Vec2(Math.max(...xs) + pad, Math.max(...ys) + pad) };
+  }
+  render(ctx, view) {
+    if (!this.outline) return;
+    ctx.save();
+    beginComponentTransform(ctx, view, this);
+    ctx.beginPath();
+    this.outline.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(160,190,230,0.15)';
+    ctx.fill();
+    ctx.strokeStyle = this.selected ? 'rgba(255,215,0,0.6)' : 'rgba(200,220,255,0.4)';
+    ctx.lineWidth = (this.selected ? 1.5 : 1) / view.zoom;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class ConcaveLens extends Component {
+  constructor(pos, rot, efl = -200) {
+    super('concave', pos, rot);
+    this.efl = efl;
+    this.thickness = 8;
+    this.aperture = 50;
+    this.recalcSurfaces();
+  }
+  buildGeometryForEFL(candidateEFL) {
+    return buildConcaveGeometry(candidateEFL, {
+      thickness: this.thickness, aperture: this.aperture
+    });
+  }
+  applyGeometry(geometry) {
+    const g = cloneLensGeometry(geometry);
+    this.efl = g.efl;
+    this.radius = g.radius;
+    this.outline = g.outline;
+    this.surfaces = g.surfaces;
+  }
+  snapshotGeometry() {
+    if (!this.outline || !this.surfaces) return null;
+    return cloneLensGeometry({
+      efl: this.efl, radius: this.radius, outline: this.outline, surfaces: this.surfaces
+    });
+  }
+  recalcSurfaces() {
+    const geom = this.buildGeometryForEFL(this.efl);
+    if (geom) { this.applyGeometry(geom); return true; }
+    return false;
+  }
+  containsPoint(p) {
+    const lp = this.worldToLocal(p);
+    if (this.outline) return ptInPolygon(lp, this.outline);
+    return lp.x >= -this.thickness / 2 - 2 && lp.x <= this.thickness / 2 + 2 &&
+           lp.y >= -this.aperture / 2 - 2 && lp.y <= this.aperture / 2 + 2;
+  }
+  getAABB() {
+    if (!this.outline?.length) {
+      const hw = this.aperture / 2 + 5;
+      const corners = [new Vec2(-hw, -hw), new Vec2(hw, -hw), new Vec2(hw, hw), new Vec2(-hw, hw)];
+      const wc = corners.map(c => this.localToWorld(c));
+      const xs = wc.map(c => c.x), ys = wc.map(c => c.y);
+      return { min: new Vec2(Math.min(...xs), Math.min(...ys)), max: new Vec2(Math.max(...xs), Math.max(...ys)) };
+    }
+    const worldPoints = this.outline.map(p => this.localToWorld(p));
+    const xs = worldPoints.map(p => p.x), ys = worldPoints.map(p => p.y);
+    const pad = 5;
+    return { min: new Vec2(Math.min(...xs) - pad, Math.min(...ys) - pad),
+             max: new Vec2(Math.max(...xs) + pad, Math.max(...ys) + pad) };
+  }
+  render(ctx, view) {
+    if (!this.outline) return;
+    ctx.save();
+    beginComponentTransform(ctx, view, this);
+    ctx.beginPath();
+    this.outline.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(160,190,230,0.15)';
+    ctx.fill();
+    ctx.strokeStyle = this.selected ? 'rgba(255,215,0,0.6)' : 'rgba(200,220,255,0.4)';
+    ctx.lineWidth = (this.selected ? 1.5 : 1) / view.zoom;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class FlatBlock extends Component {
+  constructor(pos, rot, w = 120, h = 60) {
+    super('flatblock', pos, rot);
+    this.w = w; this.h = h;
+    const hw = w / 2, hh = h / 2;
+    const verts = [new Vec2(-hw, -hh), new Vec2(hw, -hh), new Vec2(hw, hh), new Vec2(-hw, hh)];
+    this.verts = verts;
+    this.surfaces = [];
+    for (let i = 0; i < 4; i++) {
+      this.surfaces.push(new LineSurface(verts[i], verts[(i + 1) % 4], 1.5));
+    }
+  }
+  containsPoint(p) { return ptInConvex(this.worldToLocal(p), this.verts); }
+  getAABB() {
+    const corners = this.verts.map(c => this.localToWorld(c));
+    const xs = corners.map(c => c.x), ys = corners.map(c => c.y);
+    return { min: new Vec2(Math.min(...xs), Math.min(...ys)), max: new Vec2(Math.max(...xs), Math.max(...ys)) };
+  }
+  render(ctx, view) {
+    ctx.save();
+    beginComponentTransform(ctx, view, this);
+    const hw = this.w / 2, hh = this.h / 2;
+    ctx.fillStyle = 'rgba(160,190,230,0.15)';
+    ctx.fillRect(-hw, -hh, hw * 2, hh * 2);
+    ctx.strokeStyle = this.selected ? 'rgba(255,215,0,0.6)' : 'rgba(200,220,255,0.4)';
+    ctx.lineWidth = (this.selected ? 1.5 : 1) / view.zoom;
+    ctx.strokeRect(-hw, -hh, hw * 2, hh * 2);
+    ctx.restore();
+  }
+}
+
+class Prism extends Component {
+  constructor(pos, rot, apexAngle = 60) {
+    super('prism', pos, rot);
+    this.apexAngle = apexAngle;
+    this.height = 80;
+    this.base = 100;
+    const rad = deg2rad(apexAngle / 2);
+    const hh = this.height / 2;
+    const halfBase = hh * Math.tan(rad);
+    const verts = [
+      new Vec2(-halfBase, -hh),
+      new Vec2(halfBase, -hh),
+      new Vec2(0, hh)
+    ];
+    this.verts = verts;
+    this.surfaces = [];
+    for (let i = 0; i < 3; i++) {
+      this.surfaces.push(new LineSurface(verts[i], verts[(i + 1) % 3], 1.5));
+    }
+  }
+  containsPoint(p) { return ptInConvex(this.worldToLocal(p), this.verts); }
+  getAABB() {
+    const corners = this.verts.map(c => this.localToWorld(c));
+    const xs = corners.map(c => c.x), ys = corners.map(c => c.y);
+    return { min: new Vec2(Math.min(...xs), Math.min(...ys)), max: new Vec2(Math.max(...xs), Math.max(...ys)) };
+  }
+  render(ctx, view) {
+    ctx.save();
+    beginComponentTransform(ctx, view, this);
+    ctx.beginPath();
+    this.verts.forEach((v, i) => {
+      if (i === 0) ctx.moveTo(v.x, v.y);
+      else ctx.lineTo(v.x, v.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(160,190,230,0.15)';
+    ctx.fill();
+    ctx.strokeStyle = this.selected ? 'rgba(255,215,0,0.6)' : 'rgba(200,220,255,0.4)';
+    ctx.lineWidth = (this.selected ? 1.5 : 1) / view.zoom;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class SemicircularBlock extends Component {
+  constructor(pos, rot, radius = 80) {
+    super('semicircle', pos, rot);
+    this.radius = radius;
+    const a = radius;
+    this.verts = [new Vec2(-a, 0), new Vec2(a, 0)];
+    const arcSegs = 24;
+    for (let i = 0; i <= arcSegs; i++) {
+      const ang = Math.PI + (Math.PI * i / arcSegs);
+      this.verts.push(new Vec2(Math.cos(ang) * a, Math.sin(ang) * a));
+    }
+    this.flatSurface = new LineSurface(new Vec2(-a, 0), new Vec2(a, 0), 1.5, -1);
+    this.arcSurface = new ArcSurface(new Vec2(0, 0), radius, Math.PI, 2 * Math.PI, 1, 1.5);
+    this.surfaces = [this.flatSurface, this.arcSurface];
+  }
+  containsPoint(p) {
+    const lp = this.worldToLocal(p);
+    if (lp.y > 0) return false;
+    return lp.len() <= this.radius + 2;
+  }
+  getAABB() {
+    const corners = this.verts.map(c => this.localToWorld(c));
+    const xs = corners.map(c => c.x), ys = corners.map(c => c.y);
+    return { min: new Vec2(Math.min(...xs), Math.min(...ys)), max: new Vec2(Math.max(...xs), Math.max(...ys)) };
+  }
+  render(ctx, view) {
+    ctx.save();
+    beginComponentTransform(ctx, view, this);
+    const r = this.radius;
+    ctx.beginPath();
+    ctx.moveTo(-r, 0);
+    ctx.lineTo(r, 0);
+    ctx.arc(0, 0, r, 0, Math.PI, true);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(160,190,230,0.15)';
+    ctx.fill();
+    ctx.strokeStyle = this.selected ? 'rgba(255,215,0,0.6)' : 'rgba(200,220,255,0.4)';
+    ctx.lineWidth = (this.selected ? 1.5 : 1) / view.zoom;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  § 3. RAY TRACING ENGINE
+// ─────────────────────────────────────────────────────────────
+
+class RaySample {
+  constructor(origin, direction, weight = 1, wavelength = 550, depth = 0) {
+    this.origin = origin.clone();
+    this.direction = direction.clone().norm();
+    this.weight = weight;
+    this.wavelength = wavelength;
+    this.depth = depth;
+    this.path = [origin.clone()];
+    this.terminated = false;
+    this.currentMedium = { type: 'air', componentId: null };
+  }
+}
+
+const MAX_DEPTH = 12;
+const MIN_WEIGHT = 0.005;
+
+function traceRay(sample, components) {
+  while (!sample.terminated && sample.depth < MAX_DEPTH && sample.weight > MIN_WEIGHT) {
+    let bestHit = null, bestT = Infinity, bestComp = null, bestSurf = null;
+    for (const comp of components) {
+      if (comp.type === 'raybox') continue;
+      const cosR = Math.cos(-comp.rot), sinR = Math.sin(-comp.rot);
+      const dx = sample.origin.x - comp.pos.x, dy = sample.origin.y - comp.pos.y;
+      const localO = new Vec2(dx * cosR - dy * sinR, dx * sinR + dy * cosR);
+      const localD = new Vec2(sample.direction.x * cosR - sample.direction.y * sinR,
+                              sample.direction.x * sinR + sample.direction.y * cosR);
+      for (const surf of comp.surfaces) {
+        const hit = surf.intersect(localO, localD);
+        if (hit && hit.t > EPSILON && hit.t < bestT) {
+          bestT = hit.t;
+          bestComp = comp;
+          bestSurf = surf;
+          const wp = hit.point.rotate(comp.rot).add(comp.pos);
+          const csn = Math.cos(comp.rot), ssn = Math.sin(comp.rot);
+          const wn = new Vec2(hit.normal.x * csn - hit.normal.y * ssn,
+                              hit.normal.x * ssn + hit.normal.y * csn).norm();
+          bestHit = { point: wp, normal: wn, t: hit.t, surface: hit.surface };
+        }
+      }
+    }
+    if (!bestHit) {
+      sample.path.push(sample.origin.add(sample.direction.mul(500)));
+      sample.terminated = true;
+      break;
+    }
+    const outward = bestHit.normal;
+    const alignment = sample.direction.dot(outward);
+    let entering, interfaceNormal, n1, n2;
+    if (alignment < -EPSILON) {
+      entering = true;
+      interfaceNormal = outward;
+      n1 = 1.0;
+      n2 = cauchyN(sample.wavelength);
+    } else if (alignment > EPSILON) {
+      entering = false;
+      interfaceNormal = outward.mul(-1);
+      n1 = cauchyN(sample.wavelength);
+      n2 = 1.0;
+    } else {
+      sample.origin = bestHit.point.add(sample.direction.mul(EPSILON * 10));
+      continue;
+    }
+    const validEntry = entering && sample.currentMedium.type === 'air';
+    const validExit = !entering && sample.currentMedium.type === 'glass' &&
+                      sample.currentMedium.componentId === bestComp.id;
+    if (!validEntry && !validExit) {
+      sample.origin = bestHit.point.add(sample.direction.mul(EPSILON * 10));
+      continue;
+    }
+    const cosi = -sample.direction.dot(interfaceNormal);
+    const eta = n1 / n2;
+    const k = 1 - eta * eta * (1 - cosi * cosi);
+    sample.path.push(bestHit.point);
+    if (k < 0) {
+      sample.direction = reflect(sample.direction, interfaceNormal);
+    } else {
+      sample.direction = refractRay(sample.direction, interfaceNormal, n1, n2);
+      if (entering) {
+        sample.currentMedium = { type: 'glass', componentId: bestComp.id };
+      } else {
+        sample.currentMedium = { type: 'air', componentId: null };
+      }
+    }
+    sample.origin = bestHit.point.add(sample.direction.mul(EPSILON * 10));
+    sample.depth++;
+  }
+  return sample;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  § 4. RAYBOX EMISSION
+// ─────────────────────────────────────────────────────────────
+
+function generateEmission(raybox, whiteLight = false) {
+  if (!raybox.power) return [];
+  const samples = [];
+  const dir = Vec2.fromAngle(raybox.rot);
+  const perp = dir.perp();
+  const aperHalf = raybox.apertureWidth / 2;
+  const emitOrigin = raybox.localToWorld(new Vec2(raybox.width / 2 + 2, 0));
+  const wavelengths = whiteLight ? WAVELENGTHS : [550];
+  if (raybox.slitAttachment === 'single') {
+    for (const wl of wavelengths) {
+      samples.push(new RaySample(emitOrigin, dir, 1, wl));
+    }
+  } else if (raybox.slitAttachment === 'triple') {
+    const sp = 10;
+    for (const dy of [-sp, 0, sp]) {
+      const origin = emitOrigin.add(perp.mul(dy));
+      for (const wl of wavelengths) {
+        samples.push(new RaySample(origin, dir, 0.8, wl));
+      }
+    }
+  } else {
+    const count = clamp(Math.round(40 + raybox.apertureWidth * 0.8), 40, 100);
+    const sigma = aperHalf * 0.25;
+    for (let i = 0; i < count; i++) {
+      const t = count > 1 ? (i / (count - 1)) * 2 - 1 : 0;
+      const offset = t * aperHalf;
+      const origin = emitOrigin.add(perp.mul(offset));
+      const weight = Math.exp(-0.5 * (offset / sigma) * (offset / sigma));
+      for (const wl of wavelengths) {
+        samples.push(new RaySample(origin, dir, weight, wl));
+      }
+    }
+  }
+  return samples;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  § 5. VIEW / CAMERA
+// ─────────────────────────────────────────────────────────────
+
+class View {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.cameraPos = new Vec2(100, 0);
+    this.zoom = 1;
+    this.resize();
+  }
+  resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = this.canvas.getBoundingClientRect();
+    this.canvas.width = rect.width * dpr;
+    this.canvas.height = rect.height * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.screenW = rect.width;
+    this.screenH = rect.height;
+    this.zoom = Math.min(this.screenW / 800, this.screenH / 400);
+  }
+  worldToScreen(v) {
+    return new Vec2(
+      (v.x - this.cameraPos.x) * this.zoom + this.screenW / 2,
+      -(v.y - this.cameraPos.y) * this.zoom + this.screenH / 2
+    );
+  }
+  screenToWorld(v) {
+    return new Vec2(
+      (v.x - this.screenW / 2) / this.zoom + this.cameraPos.x,
+      -(v.y - this.screenH / 2) / this.zoom + this.cameraPos.y
+    );
+  }
+}
+
+/** Set up canvas transform for a component: translate to screen center, rotate, Y-flip.
+ *  After this call, local mm coordinates map directly to screen pixels. */
+function beginComponentTransform(ctx, view, comp) {
+  const sc = view.worldToScreen(comp.pos);
+  ctx.translate(sc.x, sc.y);
+  ctx.scale(view.zoom, -view.zoom);
+  ctx.rotate(comp.rot);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  § 6. RENDERING
+// ─────────────────────────────────────────────────────────────
+
+let beamBuffer = null;
+let glowBuffer = null;
+
+function ensureBuffers(w, h) {
+  if (!beamBuffer || beamBuffer.width !== w || beamBuffer.height !== h) {
+    beamBuffer = document.createElement('canvas');
+    beamBuffer.width = w; beamBuffer.height = h;
+    glowBuffer = document.createElement('canvas');
+    glowBuffer.width = w; glowBuffer.height = h;
+  }
+}
+
+function drawGrid(ctx, view) {
+  const step = 10, major = 50, labelEvery = 100;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 0.5;
+  const tl = view.screenToWorld(new Vec2(0, view.screenH));
+  const br = view.screenToWorld(new Vec2(view.screenW, 0));
+  for (let x = Math.floor(tl.x / step) * step; x <= br.x; x += step) {
+    const s = view.worldToScreen(new Vec2(x, 0));
+    ctx.beginPath(); ctx.moveTo(s.x, 0); ctx.lineTo(s.x, view.screenH); ctx.stroke();
+  }
+  for (let y = Math.floor(br.y / step) * step; y <= tl.y; y += step) {
+    const s = view.worldToScreen(new Vec2(0, y));
+    ctx.beginPath(); ctx.moveTo(0, s.y); ctx.lineTo(view.screenW, s.y); ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 0.5;
+  for (let x = Math.floor(tl.x / major) * major; x <= br.x; x += major) {
+    const s = view.worldToScreen(new Vec2(x, 0));
+    ctx.beginPath(); ctx.moveTo(s.x, 0); ctx.lineTo(s.x, view.screenH); ctx.stroke();
+  }
+  for (let y = Math.floor(br.y / major) * major; y <= tl.y; y += major) {
+    const s = view.worldToScreen(new Vec2(0, y));
+    ctx.beginPath(); ctx.moveTo(0, s.y); ctx.lineTo(view.screenW, s.y); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.font = '9px system-ui';
+  ctx.textAlign = 'center';
+  for (let x = Math.floor(tl.x / labelEvery) * labelEvery; x <= br.x; x += labelEvery) {
+    if (x === 0) continue;
+    const s = view.worldToScreen(new Vec2(x, 0));
+    ctx.fillText(x + '', s.x, view.screenH - 4);
+  }
+  ctx.restore();
+}
+
+function drawScaleBar(ctx, view) {
+  ctx.save();
+  const barLen = 100 * view.zoom;
+  const x = 16, y = view.screenH - 24;
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, y); ctx.lineTo(x + barLen, y);
+  ctx.moveTo(x, y - 4); ctx.lineTo(x, y + 4);
+  ctx.moveTo(x + barLen, y - 4); ctx.lineTo(x + barLen, y + 4);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('100 mm', x + barLen / 2, y - 6);
+  ctx.restore();
+}
+
+function drawRays(ctx, view, samples, whiteLight) {
+  if (!samples.length) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.round(view.screenW * dpr);
+  const h = Math.round(view.screenH * dpr);
+  ensureBuffers(w, h);
+  const bctx = beamBuffer.getContext('2d');
+  bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  bctx.clearRect(0, 0, view.screenW, view.screenH);
+  const isDiscrete = samples.length <= 35;
+  if (isDiscrete) {
+    for (const s of samples) {
+      const col = whiteLight ? wavelengthToRGB(s.wavelength) : { r: 255, g: 215, b: 0 };
+      ctx.save();
+      ctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},0.85)`;
+      ctx.lineWidth = 2;
+      ctx.shadowColor = `rgba(${col.r},${col.g},${col.b},0.4)`;
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      for (let i = 0; i < s.path.length; i++) {
+        const sp = view.worldToScreen(s.path[i]);
+        if (i === 0) ctx.moveTo(sp.x, sp.y); else ctx.lineTo(sp.x, sp.y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  } else {
+    bctx.globalCompositeOperation = 'lighter';
+    for (const s of samples) {
+      const col = whiteLight ? wavelengthToRGB(s.wavelength) : { r: 255, g: 215, b: 0 };
+      bctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},${(s.weight * 0.03).toFixed(4)})`;
+      bctx.lineWidth = 1.5;
+      bctx.beginPath();
+      for (let i = 0; i < s.path.length; i++) {
+        const sp = view.worldToScreen(s.path[i]);
+        if (i === 0) bctx.moveTo(sp.x, sp.y); else bctx.lineTo(sp.x, sp.y);
+      }
+      bctx.stroke();
+    }
+    const gctx = glowBuffer.getContext('2d');
+    gctx.clearRect(0, 0, view.screenW, view.screenH);
+    gctx.filter = 'blur(3px)';
+    gctx.drawImage(beamBuffer, 0, 0, view.screenW, view.screenH);
+    gctx.filter = 'none';
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.drawImage(glowBuffer, 0, 0, view.screenW, view.screenH);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.restore();
+  }
+}
+
+function drawRotationHandle(ctx, view, comp) {
+  if (!comp.selected) return;
+  const hp = view.worldToScreen(comp.getRotHandlePos());
+  const cp = view.worldToScreen(comp.pos);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,215,0,0.5)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(cp.x, cp.y); ctx.lineTo(hp.x, hp.y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(255,215,0,0.3)';
+  ctx.strokeStyle = 'rgba(255,215,0,0.8)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(hp.x, hp.y, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+function drawSelectionOutline(ctx, view, comp) {
+  if (!comp.selected || comp.type === 'raybox') return;
+
+  // getAABB() returns a WORLD-space bounding box, so it must be mapped to
+  // screen directly — applying beginComponentTransform() on top would apply
+  // the component's rotation/position a second time and displace the box.
+  const bounds = comp.getAABB();
+  const topLeft = view.worldToScreen(
+    new Vec2(bounds.min.x, bounds.max.y)
+  );
+  const bottomRight = view.worldToScreen(
+    new Vec2(bounds.max.x, bounds.min.y)
+  );
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,215,0,0.4)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([6, 4]);
+
+  ctx.strokeRect(
+    topLeft.x,
+    topLeft.y,
+    bottomRight.x - topLeft.x,
+    bottomRight.y - topLeft.y
+  );
+
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────────────────────
+//  § 7. UNDO / REDO
+// ─────────────────────────────────────────────────────────────
+
+class Command {
+  execute() {}
+  undo() {}
+}
+
+class TransformCommand extends Command {
+  constructor(comp, oldPos, oldRot, newPos, newRot) {
+    super(); this.comp = comp;
+    this.oldPos = oldPos.clone(); this.oldRot = oldRot;
+    this.newPos = newPos.clone(); this.newRot = newRot;
+  }
+  execute() { this.comp.pos = this.newPos.clone(); this.comp.rot = this.newRot; }
+  undo() { this.comp.pos = this.oldPos.clone(); this.comp.rot = this.oldRot; }
+}
+
+class AddCommand extends Command {
+  constructor(comp) { super(); this.comp = comp; }
+  execute() { app.components.push(this.comp); }
+  undo() { app.components = app.components.filter(c => c.id !== this.comp.id); }
+}
+
+class RemoveCommand extends Command {
+  constructor(comp) { super(); this.comp = comp; this.idx = app.components.indexOf(comp); }
+  execute() { app.components = app.components.filter(c => c.id !== this.comp.id); }
+  undo() { app.components.splice(this.idx, 0, this.comp); }
+}
+
+class ClearCommand extends Command {
+  constructor(comps) { super(); this.comps = [...comps]; }
+  execute() { app.components = app.components.filter(c => c.type === 'raybox'); }
+  undo() { app.components = [...this.comps]; }
+}
+
+class PropertyCommand extends Command {
+  constructor(comp, prop, oldVal, newVal, oldGeom = null, newGeom = null) {
+    super(); this.comp = comp; this.prop = prop;
+    this.oldVal = oldVal; this.newVal = newVal;
+    this.oldGeom = oldGeom; this.newGeom = newGeom;
+  }
+  execute() {
+    this.comp[this.prop] = this.newVal;
+    if (this.newGeom && this.comp.applyGeometry) {
+      this.comp.applyGeometry(this.newGeom);
+    } else if (this.prop === 'efl' && this.comp.recalcSurfaces) {
+      this.comp.recalcSurfaces();
+    }
+  }
+  undo() {
+    this.comp[this.prop] = this.oldVal;
+    if (this.oldGeom && this.comp.applyGeometry) {
+      this.comp.applyGeometry(this.oldGeom);
+    } else if (this.prop === 'efl' && this.comp.recalcSurfaces) {
+      this.comp.recalcSurfaces();
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  § 8. APPLICATION
+// ─────────────────────────────────────────────────────────────
+
+const app = {
+  components: [],
+  selected: null,
+  raybox: null,
+  whiteLight: false,
+  undoStack: [],
+  redoStack: [],
+  dragging: null,
+  dragType: null,
+  dragStartWorld: null,
+  dragStartPos: null,
+  dragStartRot: null,
+};
+
+function pushCommand(cmd) {
+  cmd.execute();
+  app.undoStack.push(cmd);
+  if (app.undoStack.length > 50) app.undoStack.shift();
+  app.redoStack = [];
+}
+
+function undo() {
+  if (!app.undoStack.length) return;
+  const cmd = app.undoStack.pop();
+  cmd.undo();
+  app.redoStack.push(cmd);
+  if (app.selected && !app.components.includes(app.selected)) app.selected = null;
+}
+
+function redo() {
+  if (!app.redoStack.length) return;
+  const cmd = app.redoStack.pop();
+  cmd.execute();
+  app.undoStack.push(cmd);
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+function spawnPosition() {
+  const base = new Vec2(0, 0);
+  for (let i = 0; i < 20; i++) {
+    const p = base.add(new Vec2(i * 20, 0));
+    let occupied = false;
+    for (const c of app.components) {
+      if (c.type === 'raybox') continue;
+      if (c.pos.dist(p) < 40) { occupied = true; break; }
+    }
+    if (!occupied) return p;
+  }
+  return base;
+}
+
+function createComponent(type, efl) {
+  const pos = spawnPosition();
+  let comp;
+  switch (type) {
+    case 'convex': comp = new ConvexLens(pos, 0, efl); break;
+    case 'concave': comp = new ConcaveLens(pos, 0, efl); break;
+    case 'flatblock': comp = new FlatBlock(pos, 0); break;
+    case 'prism': comp = new Prism(pos, 0); break;
+    case 'semicircle': comp = new SemicircularBlock(pos, 0); break;
+  }
+  if (comp) pushCommand(new AddCommand(comp));
+}
+
+function hitTest(pt, view) {
+  for (let i = app.components.length - 1; i >= 0; i--) {
+    const c = app.components[i];
+    if (c.type === 'raybox') {
+      if (c.containsPoint(pt)) return { comp: c, part: 'body' };
+    } else {
+      const rh = c.getRotHandlePos();
+      if (pt.dist(rh) < 8 / view.zoom) return { comp: c, part: 'rotateHandle' };
+      if (c.containsPoint(pt)) return { comp: c, part: 'body' };
+    }
+  }
+  if (app.raybox) {
+    const rh = app.raybox.getRotHandlePos();
+    if (pt.dist(rh) < 8 / view.zoom) return { comp: app.raybox, part: 'rotateHandle' };
+    if (app.raybox.containsPoint(pt)) return { comp: app.raybox, part: 'body' };
+  }
+  return null;
+}
+
+function selectComp(comp) {
+  if (app.selected) app.selected.selected = false;
+  app.selected = comp;
+  if (comp) comp.selected = true;
+  updatePropsPanel();
+}
+
+function updatePropsPanel() {
+  const panel = document.getElementById('props');
+  const title = document.getElementById('props-title');
+  const body = document.getElementById('props-body');
+  const c = app.selected;
+  if (!c) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  let html = '';
+  if (c.type === 'raybox') {
+    title.textContent = 'Ray Box';
+    html += `<label>Power <button onclick="togglePower()">${c.power ? 'ON' : 'OFF'}</button></label>`;
+    html += `<label>Slit <select onchange="setSlit(this.value)">
+      <option value="none"${c.slitAttachment === 'none' ? ' selected' : ''}>None</option>
+      <option value="single"${c.slitAttachment === 'single' ? ' selected' : ''}>Single</option>
+      <option value="triple"${c.slitAttachment === 'triple' ? ' selected' : ''}>Triple</option>
+    </select></label>`;
+    html += `<label>Position <span>${Math.round(c.pos.x)}, ${Math.round(c.pos.y)} mm</span></label>`;
+    html += `<label>Rotation <span>${rad2deg(c.rot).toFixed(1)}°</span></label>`;
+  } else {
+    const names = { convex: 'Convex Lens', concave: 'Concave Lens', flatblock: 'Flat Block', prism: 'Prism', semicircle: 'Semicircle' };
+    title.textContent = names[c.type] || c.type;
+    if (c.type === 'convex' || c.type === 'concave') {
+      html += `<label>EFL (mm) <input type="number" value="${c.efl}" onchange="setEFL(${c.id}, this.value)" /></label>`;
+      html += `<label>Radius <span>${c.radius ? c.radius.toFixed(1) : '—'} mm</span></label>`;
+    }
+    html += `<label>Position <span>${Math.round(c.pos.x)}, ${Math.round(c.pos.y)} mm</span></label>`;
+    html += `<label>Rotation <span>${rad2deg(c.rot).toFixed(1)}°</span></label>`;
+    html += `<button class="del" onclick="deleteSelected()">Delete</button>`;
+    html += ` <button onclick="duplicateSelected()">Duplicate</button>`;
+  }
+  body.innerHTML = html;
+}
+
+window.togglePower = function() {
+  const c = app.raybox;
+  if (!c) return;
+  pushCommand(new PropertyCommand(c, 'power', c.power, !c.power));
+  updatePropsPanel();
+};
+
+window.setSlit = function(val) {
+  const c = app.raybox;
+  if (!c) return;
+  pushCommand(new PropertyCommand(c, 'slitAttachment', c.slitAttachment, val));
+  document.querySelectorAll('.tbtn.radio').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-slit-' + val).classList.add('active');
+  updatePropsPanel();
+};
+
+window.setEFL = function(id, val) {
+  const comp = app.components.find(c => c.id === id);
+  if (!comp || !comp.recalcSurfaces) return;
+  const newEfl = parseFloat(val);
+  if (!Number.isFinite(newEfl) || newEfl === 0) { showToast('Invalid EFL'); updatePropsPanel(); return; }
+  if (comp.type === 'concave' && newEfl > 0) { showToast('Concave lens EFL must be negative'); updatePropsPanel(); return; }
+  if (comp.type === 'convex' && newEfl < 0) { showToast('Convex lens EFL must be positive'); updatePropsPanel(); return; }
+  if (Math.abs(newEfl) < 50) { showToast('EFL too small (min 50 mm)'); updatePropsPanel(); return; }
+  const oldEfl = comp.efl;
+  if (oldEfl === newEfl) return;
+  // Build and fully validate the candidate geometry WITHOUT touching the
+  // component. On failure nothing changes: previous EFL/radius/outline/
+  // surfaces are retained, the input is restored, no undo entry is pushed.
+  const newGeom = comp.buildGeometryForEFL(newEfl);
+  if (!newGeom) {
+    showToast(`Cannot realise f = ${newEfl} mm with this lens (aperture/thickness limit)`);
+    updatePropsPanel();
+    return;
+  }
+  const oldGeom = comp.snapshotGeometry();
+  pushCommand(new PropertyCommand(comp, 'efl', oldEfl, newEfl, oldGeom, newGeom));
+  updatePropsPanel();
+};
+
+window.deleteSelected = function() {
+  if (!app.selected || app.selected.type === 'raybox') return;
+  pushCommand(new RemoveCommand(app.selected));
+  app.selected = null;
+  updatePropsPanel();
+};
+
+window.duplicateSelected = function() {
+  if (!app.selected || app.selected.type === 'raybox') return;
+  const c = app.selected;
+  let dup;
+  const p = spawnPosition();
+  switch (c.type) {
+    case 'convex': dup = new ConvexLens(p, c.rot, c.efl); break;
+    case 'concave': dup = new ConcaveLens(p, c.rot, c.efl); break;
+    case 'flatblock': dup = new FlatBlock(p, c.rot, c.w, c.h); break;
+    case 'prism': dup = new Prism(p, c.rot, c.apexAngle); break;
+    case 'semicircle': dup = new SemicircularBlock(p, c.rot, c.radius); break;
+  }
+  if (dup) pushCommand(new AddCommand(dup));
+};
+
+// ─────────────────────────────────────────────────────────────
+//  § 9. INPUT HANDLING
+// ─────────────────────────────────────────────────────────────
+
+let view;
+
+function initInput() {
+  const canvas = document.getElementById('canvas');
+  canvas.addEventListener('pointerdown', onPointerDown);
+  canvas.addEventListener('pointermove', onPointerMove);
+  canvas.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('keydown', onKeyDown);
+}
+
+function onPointerDown(e) {
+  const rect = view.canvas.getBoundingClientRect();
+  const sp = new Vec2(e.clientX - rect.left, e.clientY - rect.top);
+  const wp = view.screenToWorld(sp);
+  const hit = hitTest(wp, view);
+  if (hit) {
+    selectComp(hit.comp);
+    app.dragging = hit.comp;
+    app.dragType = hit.part;
+    app.dragStartWorld = wp.clone();
+    app.dragStartPos = hit.comp.pos.clone();
+    app.dragStartRot = hit.comp.rot;
+    view.canvas.style.cursor = 'grabbing';
+  } else {
+    selectComp(null);
+  }
+}
+
+function onPointerMove(e) {
+  if (!app.dragging) return;
+  const rect = view.canvas.getBoundingClientRect();
+  const sp = new Vec2(e.clientX - rect.left, e.clientY - rect.top);
+  const wp = view.screenToWorld(sp);
+  const delta = wp.sub(app.dragStartWorld);
+  if (app.dragType === 'rotateHandle') {
+    const baseAngle = Math.atan2(app.dragStartWorld.y - app.dragStartPos.y, app.dragStartWorld.x - app.dragStartPos.x);
+    const curAngle = Math.atan2(wp.y - app.dragStartPos.y, wp.x - app.dragStartPos.x);
+    app.dragging.rot = app.dragStartRot + (curAngle - baseAngle);
+  } else {
+    app.dragging.pos = app.dragStartPos.add(delta);
+  }
+}
+
+function onPointerUp() {
+  if (app.dragging) {
+    const comp = app.dragging;
+    if (comp.pos.dist(app.dragStartPos) > 0.01 || Math.abs(comp.rot - app.dragStartRot) > 0.001) {
+      const cmd = new TransformCommand(comp, app.dragStartPos, app.dragStartRot, comp.pos, comp.rot);
+      comp.pos = app.dragStartPos.clone();
+      comp.rot = app.dragStartRot;
+      pushCommand(cmd);
+    }
+    app.dragging = null;
+    app.dragType = null;
+    view.canvas.style.cursor = 'crosshair';
+    updatePropsPanel();
+  }
+}
+
+function onKeyDown(e) {
+  if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+  else if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
+  else if (e.key === 'Delete' || e.key === 'Backspace') { if (app.selected) { e.preventDefault(); deleteSelected(); } }
+  else if (e.key === 'Escape') { selectComp(null); }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  § 10. TOOLBAR BINDING
+// ─────────────────────────────────────────────────────────────
+
+function initToolbar() {
+  const bind = (id, fn) => { document.getElementById(id).addEventListener('click', fn); };
+  bind('btn-power', () => togglePower());
+  bind('btn-slit-none', () => setSlit('none'));
+  bind('btn-slit-single', () => setSlit('single'));
+  bind('btn-slit-triple', () => setSlit('triple'));
+  bind('btn-convex100', () => createComponent('convex', 100));
+  bind('btn-convex200', () => createComponent('convex', 200));
+  bind('btn-convex400', () => createComponent('convex', 400));
+  bind('btn-concave100', () => createComponent('concave', -100));
+  bind('btn-concave200', () => createComponent('concave', -200));
+  bind('btn-concave400', () => createComponent('concave', -400));
+  bind('btn-flat', () => createComponent('flatblock'));
+  bind('btn-prism', () => createComponent('prism'));
+  bind('btn-semi', () => createComponent('semicircle'));
+  bind('btn-delete', () => deleteSelected());
+  bind('btn-clear', () => {
+    const comps = [...app.components];
+    app.components = app.components.filter(c => c.type === 'raybox');
+    app.undoStack.push(new ClearCommand(comps));
+    app.redoStack = [];
+    selectComp(null);
+  });
+  bind('btn-reset', () => {
+    const oldComps = [...app.components];
+    app.components = [];
+    const rb = new RayBox(new Vec2(-150, 0), 0);
+    app.raybox = rb;
+    app.components.push(rb);
+    app.undoStack.push({
+      execute() { app.components = []; const r = new RayBox(new Vec2(-150, 0), 0); app.raybox = r; app.components.push(r); },
+      undo() { app.components = oldComps; app.raybox = oldComps.find(c => c.type === 'raybox') || oldComps[0]; }
+    });
+    app.redoStack = [];
+    selectComp(null);
+  });
+  bind('btn-undo', () => undo());
+  bind('btn-redo', () => redo());
+  bind('btn-white', () => {
+    app.whiteLight = !app.whiteLight;
+    document.getElementById('btn-white').classList.toggle('active', app.whiteLight);
+  });
+  bind('btn-help', () => { document.getElementById('help-overlay').classList.add('show'); });
+}
+
+// ─────────────────────────────────────────────────────────────
+//  § 11. MAIN LOOP
+// ─────────────────────────────────────────────────────────────
+
+let lastTime = 0;
+let samplesCache = null;
+let cacheFrame = 0;
+
+function frame(time) {
+  requestAnimationFrame(frame);
+  if (time - lastTime < 16) return;
+  lastTime = time;
+  const ctx = view.ctx;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, view.screenW, view.screenH);
+  drawGrid(ctx, view);
+  if (app.raybox && app.raybox.power) {
+    cacheFrame++;
+    if (cacheFrame % 2 === 0 || !samplesCache) {
+      samplesCache = generateEmission(app.raybox, app.whiteLight);
+      for (const s of samplesCache) traceRay(s, app.components);
+    }
+    drawRays(ctx, view, samplesCache, app.whiteLight);
+  }
+  for (const c of app.components) c.render(ctx, view);
+  for (const c of app.components) {
+    drawSelectionOutline(ctx, view, c);
+    drawRotationHandle(ctx, view, c);
+  }
+  drawScaleBar(ctx, view);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  § 12. INITIALIZATION
+// ─────────────────────────────────────────────────────────────
+
+function init() {
+  view = new View(document.getElementById('canvas'));
+  const rb = new RayBox(new Vec2(-150, 0), 0);
+  app.raybox = rb;
+  app.components.push(rb);
+  initToolbar();
+  initInput();
+  window.addEventListener('resize', () => { view.resize(); });
+  requestAnimationFrame(frame);
+}
+
+init();
+</script>
+</body>
+</html>
